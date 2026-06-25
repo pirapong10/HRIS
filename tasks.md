@@ -89,11 +89,11 @@
 ### P2-3 · Add audit log to Employee CRUD
 - **File:** `src/controllers/employee.controller.ts`
 - **Reference:** Blueprint §8, TD-6
-- [ ] Import `writeAudit` helper
-- [ ] Add audit on `POST /api/employees` → action: `CREATE`, module: `employee`
-- [ ] Add audit on `PUT /api/employees/:id` → action: `UPDATE`, module: `employee`
-- [ ] Add audit on `DELETE /api/employees/:id` → action: `DELETE`, module: `employee`
-- [ ] Commit: `feat(audit): add audit logging to employee CRUD`
+- [x] Import `writeAudit` helper
+- [x] Add audit on `POST /api/employees` → action: `CREATE`, module: `employee`
+- [x] Add audit on `PUT /api/employees/:id` → action: `UPDATE`, module: `employee`
+- [x] Add audit on `DELETE /api/employees/:id` → action: `DELETE`, module: `employee`
+- [x] Commit: `feat(audit): add audit logging to employee CRUD`
 
 ### P2-4 · Add audit log to Payroll actions
 - **File:** `src/controllers/payroll.controller.ts`
