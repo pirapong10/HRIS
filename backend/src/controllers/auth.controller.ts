@@ -7,42 +7,7 @@ import speakeasy from 'speakeasy';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-hris-key';
 
-// Helper: load full permissions for a user
-async function loadUserPermissions(userId: number) {
-  const userRoles = await prisma.userRole.findMany({
-    where: { userId },
-    include: {
-      role: {
-        include: {
-          permissions: { include: { permission: true } }
-        }
-      }
-    }
-  });
-
-  const permSet = new Set<string>();
-  const roles: string[] = [];
-  let maxLevel = 0;
-  let deptIds: number[] = [];
-
-  for (const ur of userRoles) {
-    roles.push(ur.role.code);
-    if (ur.role.level > maxLevel) maxLevel = ur.role.level;
-    if (ur.deptIds) {
-      try { deptIds = [...deptIds, ...JSON.parse(ur.deptIds)]; } catch {}
-    }
-    for (const rp of ur.role.permissions) {
-      permSet.add(rp.permission.code);
-    }
-  }
-
-  return {
-    roles,
-    permissions: Array.from(permSet),
-    level: maxLevel,
-    deptIds: [...new Set(deptIds)]
-  };
-}
+import { loadUserPermissions } from '../utils/rbac';
 
 export const login = async (req: Request, res: Response) => {
   try {
@@ -111,7 +76,27 @@ export const login = async (req: Request, res: Response) => {
       empId: user.empId
     };
 
-    const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '1d' });
+    const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '15m' });
+    
+    // Generate Refresh Token
+    const refreshToken = uuidv4();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
+
+    await prisma.refreshToken.create({
+      data: {
+        token: refreshToken,
+        userId: user.id,
+        expiresAt
+      }
+    });
+
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
 
     res.json({
       token,
@@ -174,5 +159,44 @@ export const logout = async (req: any, res: Response) => {
   } catch (error) {
     console.error('Logout error:', error);
     res.json({ message: 'Logged out' });
+  }
+};
+
+export const refresh = async (req: Request, res: Response) => {
+  try {
+    const { refreshToken } = req.cookies;
+    if (!refreshToken) return res.status(401).json({ message: 'No refresh token provided' });
+
+    const tokenDoc = await prisma.refreshToken.findUnique({
+      where: { token: refreshToken },
+      include: { user: true }
+    });
+
+    if (!tokenDoc || tokenDoc.isRevoked || new Date() > tokenDoc.expiresAt) {
+      return res.status(401).json({ message: 'Invalid or expired refresh token' });
+    }
+
+    const { user } = tokenDoc;
+    if (!user.isActive) return res.status(401).json({ message: 'Account suspended' });
+
+    const rbac = await loadUserPermissions(user.id);
+
+    const tokenPayload = {
+      jti: uuidv4(),
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      roles: rbac.roles,
+      permissions: rbac.permissions,
+      level: rbac.level,
+      deptIds: rbac.deptIds,
+      empId: user.empId
+    };
+
+    const newAccessToken = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '15m' });
+    res.json({ token: newAccessToken });
+  } catch (error) {
+    console.error('Refresh error:', error);
+    res.status(500).json({ message: 'Server error' });
   }
 };

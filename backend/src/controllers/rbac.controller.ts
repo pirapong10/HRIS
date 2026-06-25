@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { prisma } from '../prisma';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { writeAudit } from '../utils/audit';
+import redisClient from '../utils/redis';
 
 // ── List all Roles with permission counts ────────────────────────────
 export const getRoles = async (req: AuthRequest, res: Response) => {
@@ -53,6 +54,13 @@ export const updateRolePermissions = async (req: AuthRequest, res: Response) => 
     );
 
     await prisma.$transaction(queries);
+
+    if (redisClient.isReady) {
+      const usersWithRole = await prisma.userRole.findMany({ where: { roleId: Number(id) } });
+      for (const ur of usersWithRole) {
+        await redisClient.del(`permissions:user:${ur.userId}`);
+      }
+    }
 
     res.json({ message: 'Permissions updated' });
   } catch { res.status(500).json({ message: 'Server error' }); }
@@ -124,6 +132,10 @@ export const assignUserRoles = async (req: AuthRequest, res: Response) => {
     );
 
     await prisma.$transaction(queries);
+
+    if (redisClient.isReady) {
+      await redisClient.del(`permissions:user:${id}`);
+    }
 
     res.json({ message: 'Roles assigned successfully' });
   } catch { res.status(500).json({ message: 'Server error' }); }

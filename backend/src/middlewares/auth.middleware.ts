@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../prisma';
+import redisClient from '../utils/redis';
+import { loadUserPermissions } from '../utils/rbac';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-hris-key';
 
@@ -55,14 +57,41 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
 // ── Permission Guard ─────────────────────────────────────────────────
 // Usage: requirePermission('employee:create')
 export const requirePermission = (permCode: string) => {
-  return (req: AuthRequest, res: Response, next: NextFunction) => {
+  return async (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
-    const perms = req.user.permissions || [];
-    if (perms.includes(permCode) || req.user.role === 'admin' || req.user.role === 'superadmin' || req.user.role === 'hr_admin') return next();
-    return res.status(403).json({ 
-      message: `Forbidden: requires permission '${permCode}'`,
-      required: permCode
-    });
+
+    // Admins bypass
+    if (['superadmin', 'admin', 'hr_admin'].includes(req.user.role)) return next();
+
+    try {
+      let perms: string[] = [];
+      const cacheKey = `permissions:user:${req.user.id}`;
+      
+      if (redisClient.isReady) {
+        const cached = await redisClient.get(cacheKey);
+        if (cached) {
+          perms = JSON.parse(cached);
+        }
+      }
+
+      if (perms.length === 0) {
+        const rbac = await loadUserPermissions(req.user.id);
+        perms = rbac.permissions;
+        if (redisClient.isReady) {
+          await redisClient.setEx(cacheKey, 3600, JSON.stringify(perms));
+        }
+      }
+
+      if (perms.includes(permCode) || req.user.roles.includes('SUPER_ADMIN')) return next();
+      
+      return res.status(403).json({ 
+        message: `Forbidden: requires permission '${permCode}'`,
+        required: permCode
+      });
+    } catch (error) {
+      console.error('Permission check error:', error);
+      return res.status(500).json({ message: 'Server error during permission check' });
+    }
   };
 };
 

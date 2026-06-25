@@ -8,6 +8,7 @@ datasource db {
 }
 
 model User {
+  refreshTokens RefreshToken[]
   id        Int      @id @default(autoincrement())
   email     String   @unique
   password  String
@@ -428,6 +429,16 @@ model TokenBlacklist {
   id        Int      @id @default(autoincrement())
   jti       String   @unique
   userId    Int
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model RefreshToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isRevoked Boolean  @default(false)
   expiresAt DateTime
   createdAt DateTime @default(now())
 }

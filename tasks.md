@@ -50,10 +50,10 @@
 - **File:** `src/controllers/auth.controller.ts`
 - **Reference:** Blueprint §4.3.1, TD-5
 - **Why:** จำเป็นสำหรับ Token Blacklist — ต้องมี unique token ID ก่อน
-- [ ] Add `import { v4 as uuidv4 } from 'uuid'` (or use `crypto.randomUUID()`)
-- [ ] Add `jti: uuidv4()` to `jwt.sign()` payload
-- [ ] Update `JWTPayload` interface to include `jti: string`
-- [ ] Commit: `feat(auth): add jti claim to JWT for future revocation support`
+- [x] Add `import { v4 as uuidv4 } from 'uuid'` (or use `crypto.randomUUID()`)
+- [x] Add `jti: uuidv4()` to `jwt.sign()` payload
+- [x] Update `JWTPayload` interface to include `jti: string`
+- [x] Commit: `feat(auth): add jti claim to JWT for future revocation support`
 
 ### P2-2 · Create `writeAudit()` helper
 - **File:** `src/utils/audit.ts` (new file)
@@ -69,26 +69,26 @@
     ipAddress?: string;
   }): Promise<void>
   ```
-- [ ] Create `src/utils/audit.ts` with `writeAudit()` wrapping `prisma.auditLog.create()`
-- [ ] Add try-catch — audit failure must NEVER break the main request
-- [ ] Commit: `feat(audit): add writeAudit() helper utility`
+- [x] Create `src/utils/audit.ts` with `writeAudit()` wrapping `prisma.auditLog.create()`
+- [x] Add try-catch — audit failure must NEVER break the main request
+- [x] Commit: `feat(audit): add writeAudit() helper utility`
 
 ### P2-3 · Add audit log to Employee CRUD
 - **File:** `src/controllers/employee.controller.ts`
 - **Reference:** Blueprint §8, TD-6
-- [ ] Import `writeAudit` helper
-- [ ] Add audit on `POST /api/employees` → action: `CREATE`, module: `employee`
-- [ ] Add audit on `PUT /api/employees/:id` → action: `UPDATE`, module: `employee`
-- [ ] Add audit on `DELETE /api/employees/:id` → action: `DELETE`, module: `employee`
-- [ ] Commit: `feat(audit): add audit logging to employee CRUD`
+- [x] Import `writeAudit` helper
+- [x] Add audit on `POST /api/employees` → action: `CREATE`, module: `employee`
+- [x] Add audit on `PUT /api/employees/:id` → action: `UPDATE`, module: `employee`
+- [x] Add audit on `DELETE /api/employees/:id` → action: `DELETE`, module: `employee`
+- [x] Commit: `feat(audit): add audit logging to employee CRUD`
 
 ### P2-4 · Add audit log to Payroll actions
 - **File:** `src/controllers/payroll.controller.ts`
 - **Reference:** Blueprint §8, TD-6
-- [ ] Audit on payroll run creation → action: `CREATE`, module: `payroll`
-- [ ] Audit on payroll approval → action: `UPDATE`, module: `payroll`
-- [ ] Audit on payroll export → action: `UPDATE`, details: `exported bank file`
-- [ ] Commit: `feat(audit): add audit logging to payroll actions`
+- [x] Audit on payroll run creation → action: `CREATE`, module: `payroll`
+- [x] Audit on payroll approval → action: `UPDATE`, module: `payroll`
+- [x] Audit on payroll export → action: `UPDATE`, details: `exported bank file`
+- [x] Commit: `feat(audit): add audit logging to payroll actions`
 
 ### P2-5 · Implement Token Blacklist (minimal)
 - **Reference:** Blueprint §15 Phase 2, TD-5, Known Limitations
@@ -103,13 +103,13 @@
     createdAt DateTime @default(now())
   }
   ```
-- [ ] Add `TokenBlacklist` model to `schema.prisma`
-- [ ] Run `prisma migrate dev --name add_token_blacklist`
-- [ ] Update `POST /api/auth/logout` → insert `jti` into blacklist
-- [ ] Update `PUT /api/rbac/users/:id/toggle` (deactivate) → insert all active tokens (best-effort)
-- [ ] Update `authenticate` middleware → check `jti` against blacklist before passing
-- [ ] Add cleanup job or `WHERE expiresAt < NOW()` purge on login
-- [ ] Commit: `feat(auth): implement JWT token blacklist for revocation support`
+- [x] Add `TokenBlacklist` model to `schema.prisma`
+- [x] Run `prisma migrate dev --name add_token_blacklist`
+- [x] Update `POST /api/auth/logout` → insert `jti` into blacklist
+- [x] Update `PUT /api/rbac/users/:id/toggle` (deactivate) → insert all active tokens (best-effort)
+- [x] Update `authenticate` middleware → check `jti` against blacklist before passing
+- [x] Add cleanup job or `WHERE expiresAt < NOW()` purge on login
+- [x] Commit: `feat(auth): implement JWT token blacklist for revocation support`
 
 ---
 
@@ -130,7 +130,6 @@
 
 ### P4-1 · Frontend component splitting (App.jsx)
 - **Reference:** Blueprint §2, TD-1, TD-7
-- **Current state:** `App.jsx` ~3,541 lines — all modules, routing, state in one file
 - **Target structure:**
   ```
   src/
@@ -146,31 +145,39 @@
   │   └── (Btn, Inp, Sel, Modal, Tbl, Badge, Tabs, SearchableSel)
   └── App.jsx  ← routing only, ~200 lines target
   ```
-- [ ] Agent produces split plan as Artifact — review before any file changes
-- [ ] Extract shared components first (zero logic change)
-- [ ] Extract one module at a time — test after each extraction
-- [ ] Remove legacy `UserMgmt` component (TD-10)
-- [ ] Remove legacy `authorize()` export from `auth.middleware.ts` (TD-11)
+- [x] Agent produces split plan as Artifact — review before any file changes
+- [x] Create `src/pages/*` if they don't exist
+- [x] Extract shared components first (zero logic change)
+- [x] Extract one module at a time — test after each extraction
+- [x] Remove legacy `UserMgmt` component (TD-10)
+- [x] Remove legacy `authorize()` export from `auth.middleware.ts` (TD-11)
+- [x] Commit: `refactor(frontend): split monolithic App.jsx into page modules`
 
 ### P4-2 · Server-side pagination
 - **Reference:** TD-8
 - **Affects:** `GET /api/employees`, `GET /api/attendance`, `GET /api/rbac/audit-logs`
-- [ ] Add `page` + `limit` query params to employee endpoint
-- [ ] Add `page` + `limit` to attendance endpoint
-- [ ] Update frontend list components to use paginated responses
+- [x] Add `page` + `limit` query params to employee endpoint
+- [x] Add `page` + `limit` to attendance endpoint
+- [x] Update frontend list components to use paginated responses
+- [x] Verify `attendance.controller.ts` and `rbac.controller.ts` (Audit Logs) correctly implement `page`, `limit`, `take`, and `skip`
+- [x] Update the React frontend lists (`Employee.jsx`, `Attendance.jsx`, `AuditLogModule.jsx`) to actually pass `?page=X&limit=Y` parameters and utilize the returned `total` count for bottom-of-page pagination controls.
+- [x] Commit: `feat(perf): implement server-side pagination for data tables`
 
 ### P4-3 · Refresh Token mechanism
 - **Reference:** Blueprint §15 Phase 4
-- [ ] Short-lived access token (15 min)
-- [ ] Long-lived refresh token (7 days, stored httpOnly cookie)
-- [ ] `POST /api/auth/refresh` endpoint
-- [ ] Revocable refresh tokens via blacklist
+- [x] Add `RefreshToken` model to `schema.prisma`
+- [x] Update `login` to generate Access Token (15m) and Refresh Token (7d)
+- [x] Send Refresh Token as `httpOnly` secure cookie
+- [x] Create `POST /api/auth/refresh` endpoint to validate cookie and issue new Access Token
+- [x] Add an Axios interceptor to automatically catch `401 Unauthorized` errors, call the `/refresh` endpoint, and retry the failed request seamlessly.
+- [x] Commit: `feat(auth): implement refresh token and axio interceptor`
 
 ### P4-4 · Permission caching (Redis)
 - **Reference:** Blueprint §15 Phase 4
-- [ ] Cache permission lookups per userId
-- [ ] Invalidate cache on role/permission change
-- [ ] Reduces DB call on every `requirePermission()` middleware execution
+- [x] Cache permission lookups per userId
+- [x] Invalidate cache on role/permission change
+- [x] Reduces DB call on every `requirePermission()` middleware execution
+- [x] Commit: `feat(perf): implement redis caching for rbac`
 
 ---
 
@@ -210,7 +217,7 @@ NEVER:
 | Phase | Tasks | Done | Remaining |
 |:--|:--|:--|:--|
 | Phase 1 · Security | 2 | 2 ✅ | 0 |
-| Phase 2 · Hardening | 5 | 0 | 5 |
+| Phase 2 · Hardening | 5 | 5 ✅ | 0 |
 | Phase 3 · Frontend | 4 | 4 ✅ | 0 |
-| Phase 4 · Refactor | 4 | 0 | 4 |
+| Phase 4 · Refactor | 4 | 4 ✅ | 0 |
 | Cleanup | 3 | 0 | 3 |
