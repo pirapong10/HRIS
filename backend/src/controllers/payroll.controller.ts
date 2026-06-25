@@ -11,19 +11,17 @@ export const runPayroll = async (req: AuthRequest, res: Response) => {
     const { period } = req.body;
     if (!period) return res.status(400).json({ message: 'Period is required (YYYY-MM)' });
 
-    // 1. Enforce PayrollScope
-    const scopeWhere = req.user ? await buildPayrollWhereClause(req.user) : { empId: -1 };
+    if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
 
-    let empWhere: any = {};
-    if (scopeWhere.employee) {
-      empWhere = scopeWhere.employee;
-    } else if (scopeWhere.empId !== undefined) {
-      empWhere.id = scopeWhere.empId;
+    // 1. Enforce PayrollScope
+    const scope = await buildPayrollWhereClause(req.user);
+    if (scope.accessLevel === 'DENIED') {
+      return res.status(403).json({ message: 'No access' });
     }
 
     // 2. Fetch employees under scope
     const employees = await prisma.employee.findMany({
-      where: empWhere,
+      where: scope.employeeWhere,
       include: {
         shift: true,
         department: true,
@@ -156,17 +154,15 @@ export const runPayroll = async (req: AuthRequest, res: Response) => {
 
 export const getPayroll = async (req: AuthRequest, res: Response) => {
   try {
-    const scopeWhere = req.user ? await buildPayrollWhereClause(req.user) : { empId: -1 };
+    if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
     
-    let detailWhere: any = {};
-    if (scopeWhere.employee) {
-      detailWhere.employee = scopeWhere.employee;
-    } else if (scopeWhere.empId !== undefined) {
-      detailWhere.empId = scopeWhere.empId;
+    const scope = await buildPayrollWhereClause(req.user);
+    if (scope.accessLevel === 'DENIED') {
+      return res.status(403).json({ message: 'No access' });
     }
 
     const details = await prisma.payrollRunDetail.findMany({
-      where: detailWhere,
+      where: scope.payrollDetailWhere,
       include: {
         employee: true,
         payrollRun: true
