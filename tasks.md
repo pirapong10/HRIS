@@ -82,9 +82,9 @@
     ipAddress?: string;
   }): Promise<void>
   ```
-- [ ] Create `src/utils/audit.ts` with `writeAudit()` wrapping `prisma.auditLog.create()`
-- [ ] Add try-catch — audit failure must NEVER break the main request
-- [ ] Commit: `feat(audit): add writeAudit() helper utility`
+- [x] Create `src/utils/audit.ts` with `writeAudit()` wrapping `prisma.auditLog.create()`
+- [x] Add try-catch — audit failure must NEVER break the main request
+- [x] Commit: `feat(audit): add writeAudit() helper utility`
 
 ### P2-3 · Add audit log to Employee CRUD
 - **File:** `src/controllers/employee.controller.ts`

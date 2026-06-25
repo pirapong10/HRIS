@@ -1,27 +1,26 @@
 import { prisma } from '../prisma';
 
-interface AuditParams {
+export async function writeAudit(data: {
   userId?: number;
-  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN_SUCCESS' | 'LOGIN_FAILED' | 'LOGOUT' | 'PERMISSION_CHANGED' | 'ROLE_ASSIGNED' | 'USER_CREATED';
-  module: 'auth' | 'employee' | 'organization' | 'attendance' | 'payroll' | 'access_control' | 'settings' | 'shift';
+  action: string;
+  module?: string;
   recordId?: string;
-  details: string;
+  details?: string;
   ipAddress?: string;
-}
-
-export const writeAudit = async (params: AuditParams): Promise<void> => {
+}): Promise<void> {
   try {
     await prisma.auditLog.create({
       data: {
-        userId: params.userId || 0, // 0 for system/unauthenticated
-        action: params.action,
-        module: params.module,
-        details: params.details,
-        ipAddress: params.ipAddress
+        userId: data.userId,
+        action: data.action,
+        module: data.module,
+        recordId: data.recordId,
+        details: data.details,
+        ipAddress: data.ipAddress
       }
     });
   } catch (error) {
     console.error('Failed to write audit log:', error);
     // Deliberately swallowing error to prevent breaking main transaction
   }
-};
+}
