@@ -1,0 +1,98 @@
+import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcrypt';
+
+const prisma = new PrismaClient();
+
+async function main() {
+  console.log('Seeding initial data...');
+
+  // Clean up existing data to prevent duplicates on re-seed
+  await prisma.user.deleteMany({});
+  await prisma.attendanceCorrection.deleteMany({});
+  await prisma.attendance.deleteMany({});
+  await prisma.leave.deleteMany({});
+  await prisma.oT.deleteMany({});
+  await prisma.shiftSwap.deleteMany({});
+  await prisma.payrollRunDetail.deleteMany({});
+  await prisma.payrollRun.deleteMany({});
+  await prisma.empDoc.deleteMany({});
+  await prisma.empHistory.deleteMany({});
+  await prisma.onboardingTask.deleteMany({});
+  await prisma.employee.deleteMany({});
+  await prisma.headcountRequest.deleteMany({});
+  await prisma.position.deleteMany({});
+  await prisma.department.deleteMany({});
+  await prisma.shift.deleteMany({});
+  await prisma.costCenter.deleteMany({});
+
+  const passwordHash = await bcrypt.hash('admin1234', 10);
+
+  // 1. Shifts
+  const shift1 = await prisma.shift.create({ data: { name: 'กะเช้า', startTime: '08:00', endTime: '17:00', days: 'Mon,Tue,Wed,Thu,Fri' } });
+  const shift2 = await prisma.shift.create({ data: { name: 'กะบ่าย', startTime: '13:00', endTime: '22:00', days: 'Mon,Tue,Wed,Thu,Fri,Sat', color: '#8B5CF6' } });
+  const shift3 = await prisma.shift.create({ data: { name: 'กะดึก', startTime: '22:00', endTime: '07:00', days: 'Mon,Tue,Wed,Thu,Fri', color: '#F59E0B' } });
+
+  // 2. Cost Centers
+  const cc1 = await prisma.costCenter.create({ data: { code: 'CC-IT', name: 'Information Technology', budget: 1500000, fiscalYear: '2025' } });
+  const cc2 = await prisma.costCenter.create({ data: { code: 'CC-HR', name: 'Human Resources', budget: 500000, fiscalYear: '2025' } });
+  const cc3 = await prisma.costCenter.create({ data: { code: 'CC-SALE', name: 'Sales & Marketing', budget: 2000000, fiscalYear: '2025' } });
+
+  // 3. Departments
+  const dept1 = await prisma.department.create({ data: { code: 'IT01', name: 'IT Support', costCenterId: cc1.id } });
+  const dept2 = await prisma.department.create({ data: { code: 'HR01', name: 'Human Resources', costCenterId: cc2.id } });
+  const dept3 = await prisma.department.create({ data: { code: 'SAL01', name: 'Sales Domestic', costCenterId: cc3.id } });
+  const dept4 = await prisma.department.create({ data: { code: 'SAL02', name: 'Sales International', costCenterId: cc3.id } });
+
+  // 4. Positions
+  const pos1 = await prisma.position.create({ data: { code: 'POS01', name: 'Software Engineer', deptId: dept1.id, level: 'Junior', salary: 35000 } });
+  const pos2 = await prisma.position.create({ data: { code: 'POS02', name: 'Senior Software Engineer', deptId: dept1.id, level: 'Senior', salary: 55000 } });
+  const pos3 = await prisma.position.create({ data: { code: 'POS03', name: 'HR Manager', deptId: dept2.id, level: 'Manager', salary: 65000 } });
+  const pos4 = await prisma.position.create({ data: { code: 'POS04', name: 'HR Officer', deptId: dept2.id, level: 'Junior', salary: 45000 } });
+  const pos5 = await prisma.position.create({ data: { code: 'POS05', name: 'Sales Representative', deptId: dept3.id, level: 'Junior', salary: 32000 } });
+
+  // 5. Employees
+  const emp1 = await prisma.employee.create({
+    data: {
+      empCode: 'EMP001', name: 'ธนพล ใจดี', deptId: dept1.id, posId: pos2.id, type: 'fulltime', hireDate: '2021-03-01', dob: '1990-05-15', gender: 'male', salary: 55000, bank: 'กสิกรไทย', bankAcc: 'xxx-x-xx001-x', phone: '081-234-5678', email: 'thanapol@company.com', shiftId: shift1.id, emName: 'คุณแม่', emRel: 'มารดา', emPhone: '089-999-9999'
+    }
+  });
+  const emp2 = await prisma.employee.create({
+    data: {
+      empCode: 'EMP002', name: 'นิตยา สมบูรณ์', deptId: dept2.id, posId: pos4.id, type: 'fulltime', hireDate: '2020-06-15', dob: '1988-09-22', gender: 'female', salary: 45000, bank: 'ไทยพาณิชย์', bankAcc: 'xxx-x-xx002-x', phone: '082-345-6789', email: 'nittaya@company.com', shiftId: shift1.id
+    }
+  });
+  const emp3 = await prisma.employee.create({
+    data: {
+      empCode: 'EMP003', name: 'สมชาย รักดี', deptId: dept1.id, posId: pos1.id, type: 'fulltime', hireDate: '2023-01-10', dob: '1995-12-01', gender: 'male', salary: 35000, bank: 'กรุงเทพ', bankAcc: 'xxx-x-xx003-x', phone: '083-456-7890', email: 'somchai@company.com', shiftId: shift2.id
+    }
+  });
+  const emp4 = await prisma.employee.create({
+    data: {
+      empCode: 'EMP004', name: 'วิภา รักษ์งาน', deptId: dept3.id, posId: pos5.id, type: 'fulltime', hireDate: '2022-08-20', dob: '1992-03-14', gender: 'female', salary: 32000, bank: 'กรุงศรี', bankAcc: 'xxx-x-xx004-x', phone: '084-567-8901', email: 'wipa@company.com', shiftId: shift3.id
+    }
+  });
+
+  // 6. Users (Logins)
+  const adminHash = await bcrypt.hash('admin123', 10);
+  const hrHash = await bcrypt.hash('hr123', 10);
+  const empHash = await bcrypt.hash('emp123', 10);
+
+  await prisma.user.create({
+    data: { email: 'admin@company.com', password: adminHash, role: 'superadmin', empId: emp1.id }
+  });
+  await prisma.user.create({
+    data: { email: 'hr@company.com', password: hrHash, role: 'hr_admin', empId: emp2.id }
+  });
+  await prisma.user.create({
+    data: { email: 'emp@company.com', password: empHash, role: 'user', empId: emp3.id }
+  });
+
+  console.log('Seeding completed! You can log in with:');
+  console.log('👑 Admin: admin@company.com / admin123');
+  console.log('👩💼 HR: hr@company.com / hr123');
+  console.log('👤 Emp: emp@company.com / emp123');
+}
+
+main()
+  .catch((e) => { console.error(e); process.exit(1); })
+  .finally(async () => { await prisma.$disconnect(); });

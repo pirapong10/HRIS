@@ -4,6 +4,7 @@ import { buildPayrollWhereClause } from '../utils/scopeFilter';
 import { AuthRequest } from '../middlewares/auth.middleware';
 
 import { calcThaiTax, calcOTPay, calcSso } from '../utils/payroll';
+import { writeAudit } from '../utils/audit';
 
 export const runPayroll = async (req: AuthRequest, res: Response) => {
   try {
@@ -126,15 +127,13 @@ export const runPayroll = async (req: AuthRequest, res: Response) => {
     });
 
     if (req.user) {
-      await prisma.auditLog.create({
-        data: {
-          userId: req.user.id,
-          action: 'PAYROLL_RUN',
-          module: 'payroll',
-          recordId: String(payrollRun.id),
-          details: `Processed payroll for period ${period} (${payrollResults.length} employees)`,
-          ipAddress: req.ip ? String(req.ip) : null
-        }
+      await writeAudit({
+        userId: req.user.id,
+        action: 'CREATE',
+        module: 'payroll',
+        recordId: String(payrollRun.id),
+        details: `Processed payroll for period ${period} (${payrollResults.length} employees)`,
+        ipAddress: req.ip ? String(req.ip) : undefined
       });
     }
 

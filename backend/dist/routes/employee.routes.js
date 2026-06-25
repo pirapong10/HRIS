@@ -1,0 +1,15 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const employee_controller_1 = require("../controllers/employee.controller");
+const auth_middleware_1 = require("../middlewares/auth.middleware");
+const router = (0, express_1.Router)();
+router.get('/', auth_middleware_1.authenticate, (0, auth_middleware_1.requirePermission)('employee:view'), employee_controller_1.getEmployees);
+router.post('/', auth_middleware_1.authenticate, (0, auth_middleware_1.requirePermission)('employee:create'), employee_controller_1.createEmployee);
+router.get('/:id', auth_middleware_1.authenticate, (0, auth_middleware_1.requirePermission)('employee:view'), employee_controller_1.getEmployeeDetails);
+router.put('/:id', auth_middleware_1.authenticate, (0, auth_middleware_1.requirePermission)('employee:edit'), employee_controller_1.updateEmployee);
+router.delete('/:id', auth_middleware_1.authenticate, (0, auth_middleware_1.requirePermission)('employee:delete'), employee_controller_1.deleteEmployee);
+router.post('/:id/docs', auth_middleware_1.authenticate, (0, auth_middleware_1.requirePermission)('employee:edit'), employee_controller_1.addDoc);
+router.delete('/:id/docs/:docId', auth_middleware_1.authenticate, (0, auth_middleware_1.requirePermission)('employee:edit'), employee_controller_1.deleteDoc);
+router.put('/:id/onboarding/:taskId', auth_middleware_1.authenticate, (0, auth_middleware_1.requirePermission)('employee:edit'), employee_controller_1.toggleOnboardingTask);
+exports.default = router;

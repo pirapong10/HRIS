@@ -1,0 +1,442 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  role      String   @default("user") // legacy field kept for compatibility
+  isActive  Boolean  @default(true)
+  empId     Int?     @unique
+  employee  Employee? @relation(fields: [empId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  mfaEnabled Boolean @default(false)
+  mfaSecret  String?
+  
+  auditLogs    AuditLog[]
+  notifications Notification[]
+  approvalLogs  ApprovalLog[]
+  userRoles     UserRole[]
+  dataScope     DataScope?
+  payrollScope  PayrollScope?
+}
+
+// ─── RBAC Models ──────────────────────────────────────────────────────
+
+model Role {
+  id          Int    @id @default(autoincrement())
+  code        String @unique // SUPER_ADMIN, SYSTEM_ADMIN, HR_DIRECTOR, HR_MANAGER, PAYROLL_MANAGER, PAYROLL_OFFICER, DEPT_MANAGER, EMPLOYEE
+  name        String
+  description String?
+  level       Int    @default(0) // hierarchy: higher = more access
+  isSystem    Boolean @default(true)
+  
+  userRoles   UserRole[]
+  permissions RolePermission[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Permission {
+  id          Int    @id @default(autoincrement())
+  module      String // dashboard, organization, employee, attendance, leave, shift, payroll, reports, settings, access_control, audit_logs
+  action      String // view, create, edit, delete, approve, export
+  code        String @unique // e.g. employee:view
+  description String?
+  
+  rolePermissions RolePermission[]
+}
+
+model RolePermission {
+  id           Int @id @default(autoincrement())
+  roleId       Int
+  permissionId Int
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  
+  @@unique([roleId, permissionId])
+}
+
+model UserRole {
+  id      Int  @id @default(autoincrement())
+  userId  Int
+  roleId  Int
+  deptIds String? // JSON array: restrict dept_manager to specific depts
+  
+  user    User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role    Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, roleId])
+}
+
+model DataScope {
+  id            Int    @id @default(autoincrement())
+  userId        Int    @unique
+  user          User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  departmentIds String? // JSON: ["1","2"]
+  costCenterIds String? // JSON
+  employeeTypes String? // JSON: ["fulltime","parttime"]
+  jobGrades     String? // JSON: ["E1","E2"]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model PayrollScope {
+  id            Int    @id @default(autoincrement())
+  userId        Int    @unique
+  user          User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employeeTypes String? // JSON
+  grades        String? // JSON
+  departments   String? // JSON
+  costCenters   String? // JSON
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+
+model Employee {
+  id          Int      @id @default(autoincrement())
+  empCode     String   @unique
+  name        String
+  dob         String?
+  gender      String?
+  type        String   @default("fulltime")
+  phone       String?
+  email       String?
+  hireDate    String?
+  salary      Float    @default(0)
+  bank        String?
+  bankAcc     String?
+  
+  // Emergency Contact
+  emName      String?
+  emRel       String?
+  emPhone     String?
+
+  deptId      Int?
+  posId       Int?
+  shiftId     Int?
+
+  user        User?
+  
+  department  Department? @relation("EmpDepartment", fields: [deptId], references: [id])
+  position    Position?   @relation(fields: [posId], references: [id])
+  shift       Shift?      @relation(fields: [shiftId], references: [id])
+  
+  docs        EmpDoc[]
+  history     EmpHistory[]
+  onboarding  OnboardingTask[]
+  attendance  Attendance[]
+  corrections AttendanceCorrection[]
+  leaves      Leave[]
+  ots         OT[]
+  payrolls    PayrollRunDetail[]
+  
+  headOf      Department[] @relation("DeptHead")
+  
+  swapsRequested ShiftSwap[] @relation("SwapReq")
+  swapsTargeted  ShiftSwap[] @relation("SwapTarget")
+  
+  approvalReqs ApprovalRequest[] @relation("ApprovalReqs")
+
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Department {
+  id            Int      @id @default(autoincrement())
+  code          String   @unique
+  name          String
+  type          String   @default("Department") // Company, Division, Department, Section, Team
+  description   String?
+  parentId      Int?
+  parent        Department?  @relation("SubDepts", fields: [parentId], references: [id])
+  children      Department[] @relation("SubDepts")
+  
+  headId        Int?
+  head          Employee?    @relation("DeptHead", fields: [headId], references: [id])
+  
+  costCenterId  Int?
+  costCenter    CostCenter?  @relation(fields: [costCenterId], references: [id])
+  
+  status        String   @default("active") // active, inactive
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  employees     Employee[]   @relation("EmpDepartment")
+  positions     Position[]
+  headcountReqs HeadcountRequest[]
+}
+
+model Position {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique
+  name        String
+  description String?
+  deptId      Int?
+  level             String?
+  grade             String?
+  salaryMin         Float?
+  salaryMax         Float?
+  salary            Float    @default(0)
+  approvedHeadcount Int      @default(1)
+  
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  employees     Employee[]
+  department    Department? @relation(fields: [deptId], references: [id])
+  headcountReqs HeadcountRequest[]
+}
+
+model CostCenter {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique
+  name        String
+  budget      Float    @default(0)
+  fiscalYear  String
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  departments Department[]
+}
+
+model Shift {
+  id            Int      @id @default(autoincrement())
+  name          String
+  startTime     String
+  endTime       String
+  breakMins     Int      @default(60)
+  days          String   // JSON string or comma separated
+  otRate        Float    @default(1.5)
+  otRateHoliday Float    @default(3.0)
+  color         String   @default("#3B82F6")
+  
+  employees     Employee[]
+  attendance    Attendance[]
+  ots           OT[]
+}
+
+model Attendance {
+  id          Int      @id @default(autoincrement())
+  empId       Int
+  employee    Employee @relation(fields: [empId], references: [id])
+  date        String
+  clockIn     String?
+  clockOut    String?
+  status      String   @default("present")
+  shiftId     Int?
+  shift       Shift?   @relation(fields: [shiftId], references: [id])
+  locationIn  String?
+  locationOut String?
+
+  @@index([empId, date])
+}
+
+model AttendanceCorrection {
+  id          Int      @id @default(autoincrement())
+  empId       Int
+  employee    Employee @relation(fields: [empId], references: [id])
+  date        String
+  correctIn   String?
+  correctOut  String?
+  reason      String?
+  status      String   @default("pending_manager") // pending_manager, pending_hr, approved, rejected
+  approver    String?
+}
+
+model Leave {
+  id          Int      @id @default(autoincrement())
+  empId       Int
+  employee    Employee @relation(fields: [empId], references: [id])
+  type        String
+  startDate   String
+  endDate     String
+  days        Float
+  reason      String?
+  status      String   @default("pending_manager")
+  approver    String?
+}
+
+model OT {
+  id             Int      @id @default(autoincrement())
+  empId          Int
+  employee       Employee @relation(fields: [empId], references: [id])
+  date           String
+  shiftId        Int?
+  shift          Shift?   @relation(fields: [shiftId], references: [id])
+  reason         String?
+  requestedHours Float
+  isHoliday      Boolean  @default(false)
+  status         String   @default("pending_manager")
+  approver       String?
+}
+
+model ShiftSwap {
+  id             Int      @id @default(autoincrement())
+  reqEmpId       Int
+  reqEmployee    Employee @relation("SwapReq", fields: [reqEmpId], references: [id])
+  targetEmpId    Int
+  targetEmployee Employee @relation("SwapTarget", fields: [targetEmpId], references: [id])
+  date           String
+  reason         String?
+  status         String   @default("pending")
+}
+
+model PayrollRun {
+  id                Int      @id @default(autoincrement())
+  period            String   @unique
+  runDate           DateTime @default(now())
+  totalGross        Float    @default(0)
+  totalNet          Float    @default(0)
+  totalTax          Float    @default(0)
+  totalSso          Float    @default(0)
+  totalEmployerSso  Float    @default(0)
+  status            String   @default("draft") // draft, approved, paid
+  approvedBy        Int?     // User ID of approver
+
+  details           PayrollRunDetail[]
+}
+
+model PayrollRunDetail {
+  id            Int      @id @default(autoincrement())
+  payrollRunId  Int
+  payrollRun    PayrollRun @relation(fields: [payrollRunId], references: [id])
+  empId         Int
+  employee      Employee   @relation(fields: [empId], references: [id])
+  
+  gross         Float
+  otHours       Float
+  otPay         Float
+  baseSalary    Float
+  tax           Float
+  sso           Float
+  employerSso   Float    @default(0)
+  providentFund Float    @default(0)
+  loan          Float    @default(0)
+  other_deduct  Float    @default(0)
+  net           Float
+  status        String   @default("paid")
+  paidDate      String?
+
+  @@index([payrollRunId, empId])
+}
+
+model EmpDoc {
+  id          Int      @id @default(autoincrement())
+  empId       Int
+  employee    Employee @relation(fields: [empId], references: [id])
+  name        String
+  type        String
+  size        String
+  date        String
+}
+
+model EmpHistory {
+  id          Int      @id @default(autoincrement())
+  empId       Int
+  employee    Employee @relation(fields: [empId], references: [id])
+  date        String
+  type        String
+  oldVal      String
+  newVal      String
+  remark      String?
+}
+
+model OnboardingTask {
+  id          Int      @id @default(autoincrement())
+  empId       Int
+  employee    Employee @relation(fields: [empId], references: [id])
+  title       String
+  category    String
+  isCompleted Boolean  @default(false)
+}
+
+model HeadcountRequest {
+  id          Int      @id @default(autoincrement())
+  deptId      Int
+  department  Department @relation(fields: [deptId], references: [id])
+  posId       Int
+  position    Position   @relation(fields: [posId], references: [id])
+  quantity    Int
+  reason      String
+  date        String
+  status      String   @default("pending_manager")
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  module    String?
+  recordId  String?
+  details   String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  title     String
+  message   String
+  type      String   @default("in_app") // in_app, email
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model ApprovalRequest {
+  id              Int      @id @default(autoincrement())
+  type            String   // "LEAVE", "OT", "CORRECTION", "SWAP", "HEADCOUNT"
+  referenceId     Int      
+  requesterId     Int
+  requester       Employee @relation("ApprovalReqs", fields: [requesterId], references: [id])
+  status          String   @default("pending_manager")
+  currentStep     Int      @default(1)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  logs            ApprovalLog[]
+}
+
+model ApprovalLog {
+  id                Int      @id @default(autoincrement())
+  approvalRequestId Int
+  approvalRequest   ApprovalRequest @relation(fields: [approvalRequestId], references: [id])
+  approverId        Int
+  approver          User     @relation(fields: [approverId], references: [id])
+  action            String   // "APPROVED", "REJECTED"
+  comment           String?
+  createdAt         DateTime @default(now())
+}
+
+model TokenBlacklist {
+  id        Int      @id @default(autoincrement())
+  jti       String   @unique
+  userId    Int
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model SystemConfig {
+  id              Int      @id @default(autoincrement())
+  companyLat      Float    @default(13.7563)
+  companyLng      Float    @default(100.5018)
+  allowedRadiusM  Int      @default(50)
+  lateThresholdMins Int    @default(15)
+  updatedAt       DateTime @updatedAt
+}
