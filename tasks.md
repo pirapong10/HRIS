@@ -160,16 +160,16 @@
 
 ### P4-3 · Refresh Token mechanism
 - **Reference:** Blueprint §15 Phase 4
-- [ ] Short-lived access token (15 min)
-- [ ] Long-lived refresh token (7 days, stored httpOnly cookie)
-- [ ] `POST /api/auth/refresh` endpoint
-- [ ] Revocable refresh tokens via blacklist
+- [x] Short-lived access token (15 min)
+- [x] Long-lived refresh token (7 days, stored httpOnly cookie)
+- [x] `POST /api/auth/refresh` endpoint
+- [x] Revocable refresh tokens via blacklist
 
 ### P4-4 · Permission caching (Redis)
 - **Reference:** Blueprint §15 Phase 4
-- [ ] Cache permission lookups per userId
-- [ ] Invalidate cache on role/permission change
-- [ ] Reduces DB call on every `requirePermission()` middleware execution
+- [x] Cache permission lookups per userId
+- [x] Invalidate cache on role/permission change
+- [x] Reduces DB call on every `requirePermission()` middleware execution
 
 ---
 
@@ -212,5 +212,5 @@ NEVER:
 | Phase 1 · Security | 2 | 2 ✅ | 0 |
 | Phase 2 · Hardening | 5 | 5 ✅ | 0 |
 | Phase 3 · Frontend | 4 | 4 ✅ | 0 |
-| Phase 4 · Refactor | 4 | 2 ✅ | 2 (cleanup + P4-3/4) |
+| Phase 4 · Refactor | 4 | 4 ✅ | 0 |
 | Cleanup | 3 | 0 | 3 |
