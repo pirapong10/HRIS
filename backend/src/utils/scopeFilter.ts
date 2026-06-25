@@ -1,4 +1,11 @@
 import { prisma } from '../prisma';
+import { Prisma } from '@prisma/client';
+
+export interface PayrollScopeFilter {
+  accessLevel: 'GLOBAL' | 'RESTRICTED' | 'DENIED';
+  employeeWhere: Prisma.EmployeeWhereInput;
+  payrollDetailWhere: Prisma.PayrollRunDetailWhereInput;
+}
 
 export interface RequestUser {
   id: number;
@@ -57,8 +64,15 @@ export async function buildEmployeeWhereClause(user: RequestUser) {
   return where;
 }
 
-export async function buildPayrollWhereClause(user: RequestUser) {
-  if (user.level >= 80) return {};
+export async function buildPayrollWhereClause(user: RequestUser): Promise<PayrollScopeFilter> {
+  // SUPER_ADMIN / SYSTEM_ADMIN / HR_DIRECTOR → ไม่กรอง
+  if (user.level >= 80) {
+    return {
+      accessLevel: 'GLOBAL',
+      employeeWhere: {},
+      payrollDetailWhere: {}
+    };
+  }
 
   const scope = await prisma.payrollScope.findUnique({
     where: { userId: user.id }
@@ -67,18 +81,34 @@ export async function buildPayrollWhereClause(user: RequestUser) {
   if (!scope) {
     // EMPLOYEE -> only self
     if (user.level <= 10 && user.empId) {
-      return { empId: user.empId };
+      return {
+        accessLevel: 'RESTRICTED',
+        employeeWhere: { id: user.empId },
+        payrollDetailWhere: { empId: user.empId }
+      };
     }
-    return { empId: -1 }; // ถ้าไม่มี scope → ไม่เห็นอะไรเลย (safe default)
+    // No scope → ไม่เห็นอะไรเลย (safe default)
+    return {
+      accessLevel: 'DENIED',
+      employeeWhere: { id: -1 },
+      payrollDetailWhere: { empId: -1 }
+    };
   }
 
-  const where: any = {};
+  const employeeWhere: Prisma.EmployeeWhereInput = {};
+  const payrollDetailWhere: Prisma.PayrollRunDetailWhereInput = {};
+
   if (scope.departments) {
     const deptIds = JSON.parse(scope.departments);
     if (deptIds.length > 0) {
-      where.employee = { deptId: { in: deptIds.map(Number) } };
+      employeeWhere.deptId = { in: deptIds.map(Number) };
+      payrollDetailWhere.employee = { deptId: { in: deptIds.map(Number) } };
     }
   }
 
-  return where;
+  return {
+    accessLevel: 'RESTRICTED',
+    employeeWhere,
+    payrollDetailWhere
+  };
 }
