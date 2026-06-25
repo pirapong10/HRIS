@@ -63,10 +63,10 @@
 - **File:** `src/controllers/auth.controller.ts`
 - **Reference:** Blueprint §4.3.1, TD-5
 - **Why:** จำเป็นสำหรับ Token Blacklist — ต้องมี unique token ID ก่อน
-- [ ] Add `import { v4 as uuidv4 } from 'uuid'` (or use `crypto.randomUUID()`)
-- [ ] Add `jti: uuidv4()` to `jwt.sign()` payload
-- [ ] Update `JWTPayload` interface to include `jti: string`
-- [ ] Commit: `feat(auth): add jti claim to JWT for future revocation support`
+- [x] Add `import { v4 as uuidv4 } from 'uuid'` (or use `crypto.randomUUID()`)
+- [x] Add `jti: uuidv4()` to `jwt.sign()` payload
+- [x] Update `JWTPayload` interface to include `jti: string`
+- [x] Commit: `feat(auth): add jti claim to JWT for future revocation support`
 
 ### P2-2 · Create `writeAudit()` helper
 - **File:** `src/utils/audit.ts` (new file)
