@@ -12,7 +12,7 @@
 |:--|:--|
 | **System Name** | PS HRIS Enterprise |
 | **Purpose** | Comprehensive Human Resources Information System for managing organizational hierarchies, employees, attendance, payroll, and security access control |
-| **Current Version** | v2.0 · Enterprise RBAC Phase |
+| **Current Version** | v3.2 · Full Security & Refactoring Edition |
 | **Technology Stack** | React SPA (Vite) + Node.js/Express + PostgreSQL/Prisma |
 | **Application Type** | Full-Stack Web Application (Client-Server Architecture) |
 
@@ -32,20 +32,22 @@
 
 ```
 Frontend (React SPA — Vite, port 5173)
-├─ App.jsx (Monolithic — Routing, State & UI)
-│   ├─ LoginPage
-│   ├─ Dashboard
-│   ├─ OrgModule (Departments, Positions, Org Chart, Cost Centers, Headcount)
-│   ├─ EmpModule (Employee CRUD)
-│   ├─ AttModule (Attendance, Clock In/Out, Corrections)
-│   ├─ ShiftManagement (Shifts, Shift Swaps, OT Requests)
-│   ├─ PayrollModule (Payroll Runs, Payslips, Bank Export)
-│   ├─ AccessControlModule 🛡️ (Users, Roles, Permissions — NEW)
-│   ├─ AuditLogModule 📋 (System Audit Trail — NEW)
-│   ├─ SettingsModule
-│   └─ NotificationCenter
+├─ App.jsx (~200 lines — Routing shell only)
+├─ src/pages/
+│   ├─ Login.jsx
+│   ├─ Dashboard.jsx
+│   ├─ Organization.jsx (Departments, Positions, Org Chart, Cost Centers, Headcount)
+│   ├─ Employee.jsx
+│   ├─ Attendance.jsx (Clock In/Out, Corrections, Leave)
+│   ├─ ShiftManagement.jsx (Shifts, Shift Swaps, OT Requests)
+│   ├─ Payroll.jsx (Payroll Runs, Payslips, Bank Export)
+│   ├─ AccessControlModule.jsx 🛡️ (Users, Roles, Permissions)
+│   ├─ AuditLogModule.jsx 📋 (System Audit Trail)
+│   └─ Settings.jsx
+├─ src/hooks/ (useEmployees, useAttendance — paginated)
+├─ src/components/ (ProtectedRoute, Btn, Inp, Sel, Modal, Tbl, Badge, Tabs, SearchableSel)
 ├─ Design Tokens (C object — brand colors, surfaces)
-└─ Shared Components (Btn, Inp, Sel, Modal, Tbl, Badge, Tabs, SearchableSel)
+└─ Axios interceptor (auto-attaches JWT, handles 401 → refresh)
 
 Backend (Express API — port 3000)
 ├─ Routes
@@ -74,7 +76,8 @@ Database (PostgreSQL)
 ├─ Core: User, Employee, Department, Position, CostCenter, Shift
 ├─ Time: Attendance, AttendanceCorrection, Leave, OT, ShiftSwap
 ├─ Payroll: PayrollRun, PayrollRunDetail
-├─ RBAC: Role, Permission, RolePermission, UserRole, DataScope, PayrollScope (NEW)
+├─ RBAC: Role, Permission, RolePermission, UserRole, DataScope, PayrollScope
+├─ Auth: TokenBlacklist, RefreshToken
 ├─ Workflow: ApprovalRequest, ApprovalLog, HeadcountRequest
 └─ System: AuditLog, Notification, OnboardingTask, EmpDoc, EmpHistory
 ```
@@ -87,9 +90,9 @@ Database (PostgreSQL)
 | Field | Detail |
 |:--|:--|
 | **Purpose** | Verify user identity, issue JWT with RBAC claims |
-| **Endpoints** | `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout` |
-| **Features** | Login, Token generation, RBAC permission loading into JWT, Session timeout (30 min idle), Audit logging |
-| **Key Logic** | On login: loads `UserRole` → `Role` → `RolePermission` → `Permission`, embeds `roles`, `permissions`, `level`, `deptIds` into JWT payload |
+| **Endpoints** | `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout`, `POST /api/auth/refresh` |
+| **Features** | Login, Short-lived Access Token (15 min) + Refresh Token (7d httpOnly cookie), RBAC permission loading into JWT, Session timeout (30 min idle), Audit logging, Token Blacklist (jti-based revocation), Redis permission caching |
+| **Key Logic** | On login: loads `UserRole` → `Role` → `RolePermission` → `Permission`, embeds `roles`, `permissions`, `level`, `deptIds`, `jti` into JWT payload. On logout: blacklists `jti`. On deactivate: blacklists all active tokens. |
 
 ### 3.2 Organization Module
 | Field | Detail |
@@ -161,7 +164,7 @@ Layer 2 → Permission Matrix  (66 permissions: 11 modules × 6 actions)
 Layer 3 → Data Scope         (row-level filtering by dept/costcenter/grade)
 ```
 
-> ⚠️ **Layer 3 (Data Scope enforcement) is not yet enforced at the Prisma query layer.** See §15 Implementation Roadmap.
+> ✅ **Layer 3 (Data Scope + Payroll Scope) is fully enforced at the Prisma query layer.** `buildEmployeeWhereClause()` and `buildPayrollWhereClause()` in `src/utils/scopeFilter.ts`.
 
 ### 4.1 Role Hierarchy
 
@@ -429,6 +432,7 @@ App (Root)
 | **Auth** | POST | `/api/auth/login` | Public |
 | | GET | `/api/auth/me` | `authenticate` |
 | | POST | `/api/auth/logout` | `authenticate` |
+| | POST | `/api/auth/refresh` | httpOnly cookie |
 | **Employees** | GET | `/api/employees` | `employee:view` |
 | | POST | `/api/employees` | `employee:create` |
 | | PUT | `/api/employees/:id` | `employee:edit` |
@@ -471,7 +475,7 @@ Every security-relevant action is recorded with:
 | Field | Description |
 |:--|:--|
 | userId | Who performed the action |
-| action | LOGIN_SUCCESS, LOGIN_FAILED, LOGOUT, PERMISSION_CHANGED, ROLE_ASSIGNED, USER_CREATED |
+| action | LOGIN_SUCCESS, LOGIN_FAILED, LOGOUT, PERMISSION_CHANGED, ROLE_ASSIGNED, USER_CREATED, CREATE, UPDATE, DELETE |
 | module | auth, employee, organization, attendance, payroll, access_control, settings |
 | recordId | The affected record ID |
 | details | Human-readable description |
@@ -496,12 +500,15 @@ Every security-relevant action is recorded with:
 - Supports salary bands (salaryMin, salaryMax) and job grades
 
 ### Access Rules
-- All routes require valid JWT (except `/api/auth/login` and `/health`)
-- All API routes enforce `requirePermission()` middleware (migrated from legacy `authorize()`)
+- All routes require valid JWT (except `/api/auth/login`, `/api/auth/refresh`, and `/health`)
+- All API routes enforce `requirePermission()` middleware
 - Menu visibility is driven by permissions embedded in JWT claims
 - Session auto-expires after 30 minutes of idle activity
 - Suspended users are blocked from login (`isActive: false`)
-- ⚠️ PayrollScope is **not yet enforced** due to payroll logic currently being on the frontend. DataScope is enforced for employees and attendance.
+- PayrollScope enforced at Prisma query layer via `buildPayrollWhereClause()` in `scopeFilter.ts`
+- DataScope enforced for employees and attendance via `buildEmployeeWhereClause()`
+- JWT uses short-lived access token (15 min) + revocable refresh token (7 days, httpOnly cookie)
+- Deactivated users have tokens immediately blacklisted via `jti` in `TokenBlacklist` table
 
 ---
 
@@ -576,13 +583,13 @@ Employee ──→ Department, Position, Shift
 | Metric | Count |
 |:--|:--|
 | **Total Major Modules** | 9 (Auth, Org, Employee, Attendance, Shift, Payroll, Access Control, Audit Logs, Settings) |
-| **Total Database Models** | 22 (schema.prisma) |
+| **Total Database Models** | 24 (schema.prisma — added TokenBlacklist, RefreshToken) |
 | **Total API Route Groups** | 8 (/auth, /employees, /departments, /positions, /costcenters, /attendance, /approvals, /rbac) |
 | **Total RBAC Roles** | 8 (SUPER_ADMIN → EMPLOYEE) |
 | **Total Permissions** | 66 (11 modules × 6 actions) |
 | **Total Backend Controllers** | 8 |
 | **Total Backend Routes Files** | 8 |
-| **Frontend Lines (App.jsx)** | ~3,541 |
+| **Frontend Lines (App.jsx)** | ~201 (routing shell — modules extracted to src/pages/) |
 | **Seeded Employees** | 13 |
 | **Seeded Departments** | 10 (3-level hierarchy) |
 | **Seeded Positions** | 11 |
