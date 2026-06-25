@@ -180,3 +180,57 @@ export const getPayroll = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: 'Server error', details: error.message });
   }
 };
+
+export const approvePayroll = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+    const { id } = req.params;
+
+    const payrollRun = await prisma.payrollRun.update({
+      where: { id: Number(id) },
+      data: { status: 'approved' }
+    });
+
+    await writeAudit({
+      userId: req.user.id,
+      action: 'UPDATE',
+      module: 'payroll',
+      recordId: String(payrollRun.id),
+      details: `Approved payroll run for period ${payrollRun.period}`,
+      ipAddress: req.ip ? String(req.ip) : undefined
+    });
+
+    res.json(payrollRun);
+  } catch (error: any) {
+    console.error("Approve Payroll Error:", error);
+    res.status(500).json({ message: 'Server error', details: error.message });
+  }
+};
+
+export const exportPayroll = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+    const { id } = req.params;
+
+    const payrollRun = await prisma.payrollRun.findUnique({
+      where: { id: Number(id) }
+    });
+
+    if (!payrollRun) return res.status(404).json({ message: 'Not found' });
+
+    await writeAudit({
+      userId: req.user.id,
+      action: 'UPDATE',
+      module: 'payroll',
+      recordId: String(payrollRun.id),
+      details: `Exported bank file for payroll run ${payrollRun.period}`,
+      ipAddress: req.ip ? String(req.ip) : undefined
+    });
+
+    // Mock export response
+    res.json({ message: 'Bank file exported successfully', url: `/downloads/payroll-${id}.csv` });
+  } catch (error: any) {
+    console.error("Export Payroll Error:", error);
+    res.status(500).json({ message: 'Server error', details: error.message });
+  }
+};

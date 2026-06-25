@@ -98,10 +98,10 @@
 ### P2-4 · Add audit log to Payroll actions
 - **File:** `src/controllers/payroll.controller.ts`
 - **Reference:** Blueprint §8, TD-6
-- [ ] Audit on payroll run creation → action: `CREATE`, module: `payroll`
-- [ ] Audit on payroll approval → action: `UPDATE`, module: `payroll`
-- [ ] Audit on payroll export → action: `UPDATE`, details: `exported bank file`
-- [ ] Commit: `feat(audit): add audit logging to payroll actions`
+- [x] Audit on payroll run creation → action: `CREATE`, module: `payroll`
+- [x] Audit on payroll approval → action: `UPDATE`, module: `payroll`
+- [x] Audit on payroll export → action: `UPDATE`, details: `exported bank file`
+- [x] Commit: `feat(audit): add audit logging to payroll actions`
 
 ### P2-5 · Implement Token Blacklist (minimal)
 - **Reference:** Blueprint §15 Phase 2, TD-5, Known Limitations

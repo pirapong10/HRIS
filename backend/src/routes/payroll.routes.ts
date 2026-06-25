@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { runPayroll, getPayroll } from '../controllers/payroll.controller';
+import { runPayroll, getPayroll, approvePayroll, exportPayroll } from '../controllers/payroll.controller';
 import { authenticate, requirePermission, requireRole } from '../middlewares/auth.middleware';
 
 const router = Router();
@@ -12,5 +12,11 @@ router.post('/run', requirePermission('payroll:create'), runPayroll);
 
 // Get historical payroll
 router.get('/', requirePermission('payroll:view'), getPayroll);
+
+// Approve payroll
+router.put('/:id/approve', requirePermission('payroll:approve'), approvePayroll);
+
+// Export payroll
+router.post('/:id/export', requirePermission('payroll:export'), exportPayroll);
 
 export default router;
