@@ -73,7 +73,6 @@ export const login = async (req: Request, res: Response) => {
       jti: uuidv4(),
       id: user.id,
       email: user.email,
-      role: user.role, // legacy
       roles: rbac.roles,
       permissions: rbac.permissions,
       level: rbac.level,
@@ -108,7 +107,6 @@ export const login = async (req: Request, res: Response) => {
       user: {
         id: user.id,
         email: user.email,
-        role: user.role,
         roles: rbac.roles,
         permissions: rbac.permissions,
         level: rbac.level,
@@ -190,7 +188,6 @@ export const refresh = async (req: Request, res: Response) => {
       jti: uuidv4(),
       id: user.id,
       email: user.email,
-      role: user.role,
       roles: rbac.roles,
       permissions: rbac.permissions,
       level: rbac.level,

@@ -175,9 +175,9 @@
 
 ## CLEANUP TASKS (any sprint)
 
-- [ ] Delete legacy `UserMgmt` component from frontend (TD-10) ← part of P4-1 remaining
-- [ ] Remove `authorize()` export from `auth.middleware.ts` (TD-11) ← part of P4-1 remaining
-- [ ] Remove legacy `user.role` field from `User` model (TD-9) — after confirming no code references it
+- [x] Delete legacy `UserMgmt` component from frontend (TD-10) ← part of P4-1 remaining
+- [x] Remove `authorize()` export from `auth.middleware.ts` (TD-11) ← part of P4-1 remaining
+- [x] Remove legacy `user.role` field from `User` model (TD-9) — after confirming no code references it
 
 ---
 
@@ -213,4 +213,4 @@ NEVER:
 | Phase 2 · Hardening | 5 | 5 ✅ | 0 |
 | Phase 3 · Frontend | 4 | 4 ✅ | 0 |
 | Phase 4 · Refactor | 4 | 4 ✅ | 0 |
-| Cleanup | 3 | 0 | 3 |
+| Cleanup | 3 | 3 ✅ | 0 |

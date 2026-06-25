@@ -11,7 +11,7 @@ export interface AuthRequest extends Request {
     jti: string;
     id: number;
     email: string;
-    role: string;          // legacy
+
     roles: string[];       // RBAC roles e.g. ['SUPER_ADMIN']
     permissions: string[]; // e.g. ['employee:view', 'payroll:approve']
     level: number;         // hierarchy level
@@ -61,7 +61,7 @@ export const requirePermission = (permCode: string) => {
     if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
 
     // Admins bypass
-    if (['superadmin', 'admin', 'hr_admin'].includes(req.user.role)) return next();
+    if (req.user.roles.includes('SUPER_ADMIN')) return next();
 
     try {
       let perms: string[] = [];
