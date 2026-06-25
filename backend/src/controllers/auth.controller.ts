@@ -11,6 +11,11 @@ import { loadUserPermissions } from '../utils/rbac';
 
 export const login = async (req: Request, res: Response) => {
   try {
+    // Purge expired tokens from TokenBlacklist
+    await prisma.tokenBlacklist.deleteMany({
+      where: { expiresAt: { lt: new Date() } }
+    }).catch(console.error);
+
     const { email, password, mfaCode } = req.body;
     
     if (!email || !password) {

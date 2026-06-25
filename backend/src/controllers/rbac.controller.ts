@@ -258,6 +258,14 @@ export const toggleUser = async (req: AuthRequest, res: Response) => {
     if (!user) return res.status(404).json({ message: 'User not found' });
     const updated = await prisma.user.update({ where: { id: Number(id) }, data: { isActive: !user.isActive } });
     
+    // Best-effort token revocation: If deactivated, revoke all refresh tokens
+    if (!updated.isActive) {
+      await prisma.refreshToken.updateMany({
+        where: { userId: updated.id },
+        data: { isRevoked: true }
+      });
+    }
+    
     await writeAudit({
       userId: req.user!.id,
       action: 'UPDATE',

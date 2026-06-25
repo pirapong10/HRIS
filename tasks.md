@@ -116,13 +116,13 @@
     createdAt DateTime @default(now())
   }
   ```
-- [ ] Add `TokenBlacklist` model to `schema.prisma`
-- [ ] Run `prisma migrate dev --name add_token_blacklist`
-- [ ] Update `POST /api/auth/logout` → insert `jti` into blacklist
-- [ ] Update `PUT /api/rbac/users/:id/toggle` (deactivate) → insert all active tokens (best-effort)
-- [ ] Update `authenticate` middleware → check `jti` against blacklist before passing
-- [ ] Add cleanup job or `WHERE expiresAt < NOW()` purge on login
-- [ ] Commit: `feat(auth): implement JWT token blacklist for revocation support`
+- [x] Add `TokenBlacklist` model to `schema.prisma`
+- [x] Run `prisma migrate dev --name add_token_blacklist`
+- [x] Update `POST /api/auth/logout` → insert `jti` into blacklist
+- [x] Update `PUT /api/rbac/users/:id/toggle` (deactivate) → insert all active tokens (best-effort)
+- [x] Update `authenticate` middleware → check `jti` against blacklist before passing
+- [x] Add cleanup job or `WHERE expiresAt < NOW()` purge on login
+- [x] Commit: `feat(auth): implement JWT token blacklist for revocation support`
 
 ---
 
@@ -210,7 +210,7 @@ NEVER:
 | Phase | Tasks | Done | Remaining |
 |:--|:--|:--|:--|
 | Phase 1 · Security | 2 | 2 ✅ | 0 |
-| Phase 2 · Hardening | 5 | 0 | 5 |
+| Phase 2 · Hardening | 5 | 5 ✅ | 0 |
 | Phase 3 · Frontend | 4 | 4 ✅ | 0 |
 | Phase 4 · Refactor | 4 | 2 ✅ | 2 (cleanup + P4-3/4) |
 | Cleanup | 3 | 0 | 3 |
