@@ -67,18 +67,26 @@ export const requirePermission = (permCode: string) => {
       let perms: string[] = [];
       const cacheKey = `permissions:user:${req.user.id}`;
       
-      if (redisClient.isReady) {
-        const cached = await redisClient.get(cacheKey);
-        if (cached) {
-          perms = JSON.parse(cached);
+      try {
+        if (redisClient?.isReady) {
+          const cached = await redisClient.get(cacheKey);
+          if (cached) {
+            perms = JSON.parse(cached);
+          }
         }
+      } catch (redisErr) {
+        console.warn(`[Redis Fallback] Cache get failed for ${cacheKey}, falling back to DB.`);
       }
 
       if (perms.length === 0) {
         const rbac = await loadUserPermissions(req.user.id);
         perms = rbac.permissions;
-        if (redisClient.isReady) {
-          await redisClient.setEx(cacheKey, 3600, JSON.stringify(perms));
+        try {
+          if (redisClient?.isReady) {
+            await redisClient.setEx(cacheKey, 3600, JSON.stringify(perms));
+          }
+        } catch (redisErr) {
+          console.warn(`[Redis Fallback] Cache set failed for ${cacheKey} (ignored).`);
         }
       }
 
