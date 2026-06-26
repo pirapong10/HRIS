@@ -28,6 +28,7 @@ model User {
   userRoles     UserRole[]
   dataScope     DataScope?
   payrollScope  PayrollScope?
+  authGroupMembers AuthGroupMember[]
 }
 
 // ─── RBAC Models ──────────────────────────────────────────────────────
@@ -54,6 +55,7 @@ model Permission {
   description String?
   
   rolePermissions RolePermission[]
+  authGroupPermissions AuthGroupPermission[]
 }
 
 model RolePermission {
@@ -450,4 +452,44 @@ model SystemConfig {
   allowedRadiusM  Int      @default(50)
   lateThresholdMins Int    @default(15)
   updatedAt       DateTime @updatedAt
+}
+
+model AuthGroup {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  color       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  scopeDeptIds       String? // JSON: [1,2,3]
+  scopeCostCenterIds String? // JSON: [1,2]
+  scopeEmpTypes      String? // JSON: ["fulltime","parttime"]
+  scopeJobGrades     String? // JSON: ["E1","E2"]
+
+  permissions AuthGroupPermission[]
+  members     AuthGroupMember[]
+}
+
+model AuthGroupPermission {
+  id           Int        @id @default(autoincrement())
+  groupId      Int
+  permissionId Int
+  group        AuthGroup  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, permissionId])
+}
+
+model AuthGroupMember {
+  id         Int       @id @default(autoincrement())
+  groupId    Int
+  userId     Int
+  assignedBy Int
+  assignedAt DateTime  @default(now())
+  group      AuthGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
 }

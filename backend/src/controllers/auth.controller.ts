@@ -5,8 +5,10 @@ import { v4 as uuidv4 } from 'uuid';
 import { prisma } from '../prisma';
 import speakeasy from 'speakeasy';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-hris-key';
-
+if (!process.env.JWT_SECRET) {
+  throw new Error('FATAL: JWT_SECRET environment variable is missing.');
+}
+const JWT_SECRET = process.env.JWT_SECRET;
 import { loadUserPermissions } from '../utils/rbac';
 
 export const login = async (req: Request, res: Response) => {

@@ -4,7 +4,10 @@ import { prisma } from '../prisma';
 import redisClient from '../utils/redis';
 import { loadUserPermissions } from '../utils/rbac';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-hris-key';
+if (!process.env.JWT_SECRET) {
+  throw new Error('FATAL: JWT_SECRET environment variable is missing.');
+}
+const JWT_SECRET = process.env.JWT_SECRET;
 
 export interface AuthRequest extends Request {
   user?: {
@@ -119,6 +122,7 @@ export const requireRole = (roleCodes: string[]) => {
 export const requireLevel = (minLevel: number) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+    if (req.user.roles.includes('SUPER_ADMIN')) return next();
     if ((req.user.level || 0) >= minLevel) return next();
     return res.status(403).json({ message: `Forbidden: insufficient access level` });
   };

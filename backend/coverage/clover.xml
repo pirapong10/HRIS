@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<coverage generated="1782376121795" clover="3.2.0">
+  <project timestamp="1782376121795" name="All files">
+    <metrics statements="67" coveredstatements="44" conditionals="55" coveredconditionals="23" methods="5" coveredmethods="4" elements="127" coveredelements="71" complexity="0" loc="67" ncloc="67" packages="2" files="3" classes="3"/>
+    <package name="src">
+      <metrics statements="2" coveredstatements="2" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0"/>
+      <file name="prisma.ts" path="D:\Project\HRIS\backend\src\prisma.ts">
+        <metrics statements="2" coveredstatements="2" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0"/>
+        <line num="1" count="1" type="stmt"/>
+        <line num="3" count="1" type="stmt"/>
+      </file>
+    </package>
+    <package name="src.utils">
+      <metrics statements="65" coveredstatements="42" conditionals="55" coveredconditionals="23" methods="5" coveredmethods="4"/>
+      <file name="payroll.ts" path="D:\Project\HRIS\backend\src\utils\payroll.ts">
+        <metrics statements="25" coveredstatements="25" conditionals="19" coveredconditionals="14" methods="3" coveredmethods="3"/>
+        <line num="2" count="1" type="stmt"/>
+        <line num="13" count="1" type="cond" truecount="2" falsecount="0"/>
+        <line num="14" count="3" type="stmt"/>
+        <line num="15" count="3" type="stmt"/>
+        <line num="16" count="3" type="stmt"/>
+        <line num="17" count="3" type="stmt"/>
+        <line num="18" count="3" type="stmt"/>
+        <line num="19" count="8" type="cond" truecount="2" falsecount="0"/>
+        <line num="20" count="5" type="stmt"/>
+        <line num="21" count="5" type="stmt"/>
+        <line num="23" count="3" type="stmt"/>
+        <line num="26" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="28" count="2" type="stmt"/>
+        <line num="29" count="2" type="stmt"/>
+        <line num="30" count="2" type="cond" truecount="3" falsecount="1"/>
+        <line num="31" count="2" type="cond" truecount="3" falsecount="1"/>
+        <line num="32" count="2" type="stmt"/>
+        <line num="35" count="1" type="cond" truecount="1" falsecount="0"/>
+        <line num="36" count="2" type="cond" truecount="1" falsecount="1"/>
+        <line num="37" count="2" type="cond" truecount="1" falsecount="1"/>
+        <line num="38" count="2" type="stmt"/>
+        <line num="40" count="2" type="stmt"/>
+        <line num="41" count="2" type="stmt"/>
+        <line num="42" count="2" type="stmt"/>
+        <line num="44" count="2" type="stmt"/>
+      </file>
+      <file name="scopeFilter.ts" path="D:\Project\HRIS\backend\src\utils\scopeFilter.ts">
+        <metrics statements="40" coveredstatements="17" conditionals="36" coveredconditionals="9" methods="2" coveredmethods="1"/>
+        <line num="1" count="1" type="stmt"/>
+        <line num="20" count="1" type="stmt"/>
+        <line num="22" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="24" count="0" type="stmt"/>
+        <line num="28" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="30" count="0" type="cond" truecount="0" falsecount="4"/>
+        <line num="31" count="0" type="stmt"/>
+        <line num="34" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="35" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="37" count="0" type="stmt"/>
+        <line num="40" count="0" type="stmt"/>
+        <line num="42" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="43" count="0" type="stmt"/>
+        <line num="44" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="45" count="0" type="stmt"/>
+        <line num="49" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="50" count="0" type="stmt"/>
+        <line num="51" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="52" count="0" type="stmt"/>
+        <line num="56" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="57" count="0" type="stmt"/>
+        <line num="58" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="59" count="0" type="stmt"/>
+        <line num="63" count="0" type="stmt"/>
+        <line num="66" count="1" type="stmt"/>
+        <line num="68" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="69" count="1" type="stmt"/>
+        <line num="76" count="3" type="stmt"/>
+        <line num="80" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="82" count="1" type="cond" truecount="3" falsecount="1"/>
+        <line num="83" count="1" type="stmt"/>
+        <line num="90" count="0" type="stmt"/>
+        <line num="97" count="2" type="stmt"/>
+        <line num="98" count="2" type="stmt"/>
+        <line num="100" count="2" type="cond" truecount="1" falsecount="1"/>
+        <line num="101" count="2" type="stmt"/>
+        <line num="102" count="2" type="cond" truecount="1" falsecount="1"/>
+        <line num="103" count="2" type="stmt"/>
+        <line num="104" count="2" type="stmt"/>
+        <line num="108" count="2" type="stmt"/>
+      </file>
+    </package>
+  </project>
+</coverage>

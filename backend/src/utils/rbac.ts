@@ -12,6 +12,16 @@ export async function loadUserPermissions(userId: number) {
     }
   });
 
+  const groupPerms = await prisma.authGroupPermission.findMany({
+    where: {
+      group: {
+        isActive: true,
+        members: { some: { userId } }
+      }
+    },
+    include: { permission: { select: { code: true } } }
+  });
+
   const permSet = new Set<string>();
   const roles: string[] = [];
   let maxLevel = 0;
@@ -28,6 +38,10 @@ export async function loadUserPermissions(userId: number) {
     }
   }
 
+  for (const gp of groupPerms) {
+    permSet.add(gp.permission.code);
+  }
+
   return {
     roles,
     permissions: Array.from(permSet),
@@ -35,3 +49,4 @@ export async function loadUserPermissions(userId: number) {
     deptIds: [...new Set(deptIds)]
   };
 }
+
