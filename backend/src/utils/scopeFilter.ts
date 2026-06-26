@@ -60,6 +60,16 @@ export async function buildEmployeeWhereClause(user: RequestUser) {
     }
   }
 
+  if (scope.costCenterIds) {
+    const ccIds = JSON.parse(scope.costCenterIds);
+    if (ccIds.length > 0) {
+      where.department = {
+        ...where.department,
+        costCenterId: { in: ccIds.map(Number) }
+      };
+    }
+  }
+
   return where;
 }
 
