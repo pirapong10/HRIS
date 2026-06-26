@@ -3,25 +3,51 @@ import { prisma } from '../prisma';
 
 export const getDepartments = async (req: Request, res: Response) => {
   try {
-    const departments = await prisma.department.findMany({
+    const { flat } = req.query;
+    
+    const all = await prisma.department.findMany({
       include: {
-        head: true,
-        costCenter: true,
-        _count: { 
-          select: { 
-            employees: { where: { status: 'active' } } 
-          } 
+        head: {
+          select: { id: true, name: true, empCode: true }
+        },
+        costCenter: {
+          select: { id: true, name: true, code: true }
+        },
+        _count: {
+          select: { employees: { where: { status: 'active' } } }
         }
-      }
+      },
+      orderBy: { id: 'asc' }
     });
 
-    const formatted = departments.map((d: any) => ({
+    const formatted = all.map((d: any) => ({
       ...d,
       employeeCount: d._count.employees
     }));
 
-    res.json(formatted);
+    if (flat === 'true') {
+      return res.json(formatted);
+    }
+
+    // Build tree in memory
+    const map = new Map<number, any>();
+    formatted.forEach(d => map.set(d.id, { 
+      ...d, 
+      children: [] 
+    }));
+
+    const roots: any[] = [];
+    map.forEach(dept => {
+      if (dept.parentId && map.has(dept.parentId)) {
+        map.get(dept.parentId).children.push(dept);
+      } else {
+        roots.push(dept);
+      }
+    });
+
+    res.json(roots);
   } catch (error) {
+    console.error('getDepartments error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
