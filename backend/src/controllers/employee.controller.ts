@@ -41,8 +41,16 @@ export const getEmployees = async (req: AuthRequest, res: Response) => {
 
 export const createEmployee = async (req: AuthRequest, res: Response) => {
   try {
-    const { id, department, position, shift, createdAt, updatedAt, ...data } = req.body;
-    const employee = await prisma.employee.create({ data });
+    const { id, department, position, shift, createdAt, updatedAt, empCode, ...data } = req.body;
+    
+    const last = await prisma.employee.findFirst({
+      orderBy: { empCode: 'desc' },
+      select: { empCode: true }
+    });
+    const nextNum = last?.empCode ? parseInt(last.empCode.replace('EMP', '')) + 1 : 1;
+    const generatedEmpCode = `EMP${String(nextNum).padStart(3, '0')}`;
+    
+    const employee = await prisma.employee.create({ data: { ...data, empCode: generatedEmpCode } });
     
     if (req.user) {
       await writeAudit({
