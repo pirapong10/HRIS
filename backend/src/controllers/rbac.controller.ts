@@ -204,7 +204,7 @@ export const getAuditLogs = async (req: AuthRequest, res: Response) => {
     const [logs, total] = await Promise.all([
       prisma.auditLog.findMany({
         where,
-        include: { user: { select: { email: true, role: true } } },
+        include: { user: { select: { email: true, userRoles: { include: { role: true } } } } },
         orderBy: { createdAt: 'desc' },
         take: Number(limit),
         skip: (Number(page) - 1) * Number(limit)
@@ -227,7 +227,7 @@ export const createUser = async (req: AuthRequest, res: Response) => {
 
     const hashed = await bcrypt.hash(password, 10);
     const user = await prisma.user.create({
-      data: { email, password: hashed, role: 'user', empId: empId ? Number(empId) : null }
+      data: { email, password: hashed, empId: empId ? Number(empId) : null }
     });
 
     if (roleIds?.length) {

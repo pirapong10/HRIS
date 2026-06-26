@@ -123,9 +123,15 @@ export const deleteEmployee = async (req: AuthRequest, res: Response) => {
   }
 };
 
-export const getEmployeeDetails = async (req: Request, res: Response) => {
+export const getEmployeeDetails = async (req: AuthRequest, res: Response) => {
   try {
     const id = Number(req.params.id);
+
+    // Layer 4 — Record Ownership: EMPLOYEE can only view their own record
+    if (req.user && req.user.level <= 10 && req.user.empId !== id) {
+      return res.status(403).json({ message: 'Forbidden: Not your record' });
+    }
+
     const employee = await prisma.employee.findUnique({
       where: { id },
       include: {
@@ -140,6 +146,7 @@ export const getEmployeeDetails = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+
 
 export const addDoc = async (req: Request, res: Response) => {
   try {

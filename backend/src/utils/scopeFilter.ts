@@ -10,7 +10,6 @@ export interface PayrollScopeFilter {
 export interface RequestUser {
   id: number;
   email: string;
-  role: string;
   roles: string[];
   permissions: string[];
   level: number;

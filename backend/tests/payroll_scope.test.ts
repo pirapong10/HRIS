@@ -16,7 +16,6 @@ describe('PayrollScope Enforcement', () => {
     const hrDirector: RequestUser = {
       id: 999,
       email: 'hr@example.com',
-      role: 'hr_director',
       roles: ['HR_DIRECTOR'],
       permissions: [],
       level: 80,
@@ -51,7 +50,6 @@ describe('PayrollScope Enforcement', () => {
     const pm: RequestUser = {
       id: pmId,
       email: 'pm@example.com',
-      role: 'payroll_manager',
       roles: ['PAYROLL_MANAGER'],
       permissions: [],
       level: 50,
@@ -83,7 +81,6 @@ describe('PayrollScope Enforcement', () => {
     const po: RequestUser = {
       id: poId,
       email: 'po@example.com',
-      role: 'payroll_officer',
       roles: ['PAYROLL_OFFICER'],
       permissions: [],
       level: 40,
@@ -104,7 +101,6 @@ describe('PayrollScope Enforcement', () => {
     const emp: RequestUser = {
       id: empId,
       email: 'emp@example.com',
-      role: 'employee',
       roles: ['EMPLOYEE'],
       permissions: [],
       level: 10,
