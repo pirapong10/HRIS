@@ -159,7 +159,7 @@ model Department {
   id            Int      @id @default(autoincrement())
   code          String   @unique
   name          String
-  type          String   @default("Department") // Company, Division, Department, Section, Team
+  type          String   @default("Department") // Supported: Company | Region | Branch | Division | Department | Section | Team
   description   String?
   parentId      Int?
   parent        Department?  @relation("SubDepts", fields: [parentId], references: [id])
