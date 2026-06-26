@@ -17,6 +17,41 @@ export interface RequestUser {
   empId: number | null;
 }
 
+/**
+ * Recursively expands a list of department IDs to include
+ * all descendant departments (subtree).
+ * 
+ * Example: expandToSubtree([2]) where dept 2 has children [3,4]
+ *          and dept 3 has children [5] → returns [2,3,4,5]
+ */
+export async function expandToSubtree(deptIds: number[]): Promise<number[]> {
+  if (!deptIds || deptIds.length === 0) return [];
+  
+  const result = new Set<number>(deptIds);
+  const queue = [...deptIds];
+
+  let safetyCounter = 0; // prevent infinite loop
+  const MAX_DEPTH = 10;
+
+  while (queue.length > 0 && safetyCounter < MAX_DEPTH * result.size) {
+    const parentId = queue.shift()!;
+    const children = await prisma.department.findMany({
+      where: { parentId, status: 'active' },
+      select: { id: true }
+    });
+    children.forEach(c => {
+      if (!result.has(c.id)) {
+        result.add(c.id);
+        queue.push(c.id);
+      }
+    });
+    safetyCounter++;
+  }
+
+  console.log('[expandToSubtree] input:', deptIds, '→ expanded:', [...result]);
+  return [...result];
+}
+
 export async function buildEmployeeWhereClause(user: RequestUser) {
   // SUPER_ADMIN / SYSTEM_ADMIN / HR_DIRECTOR → ไม่กรอง
   if (user.level >= 80) return {};
@@ -80,14 +115,18 @@ export async function buildEmployeeWhereClause(user: RequestUser) {
   if (deptIds.size === 0 && empTypes.size === 0 && jobGrades.size === 0 && costCenterIds.size === 0) {
     // Fall back to JWT deptIds
     if (user.deptIds && user.deptIds.length > 0) {
-      return { deptId: { in: user.deptIds } };
+      const expandedDeptIds = await expandToSubtree(user.deptIds);
+      return { deptId: { in: expandedDeptIds } };
     }
     return { id: -1 };
   }
 
   const where: any = {};
 
-  if (deptIds.size > 0) where.deptId = { in: [...deptIds] };
+  if (deptIds.size > 0) {
+    const expandedDeptIds = await expandToSubtree([...deptIds]);
+    where.deptId = { in: expandedDeptIds };
+  }
   if (empTypes.size > 0) where.type = { in: [...empTypes] };
   if (jobGrades.size > 0) where.position = { grade: { in: [...jobGrades] } };
   
@@ -138,8 +177,9 @@ export async function buildPayrollWhereClause(user: RequestUser): Promise<Payrol
   if (scope.departments) {
     const deptIds = JSON.parse(scope.departments);
     if (deptIds.length > 0) {
-      employeeWhere.deptId = { in: deptIds.map(Number) };
-      payrollDetailWhere.employee = { deptId: { in: deptIds.map(Number) } };
+      const expandedDeptIds = await expandToSubtree(deptIds.map(Number));
+      employeeWhere.deptId = { in: expandedDeptIds };
+      payrollDetailWhere.employee = { deptId: { in: expandedDeptIds } };
     }
   }
 
