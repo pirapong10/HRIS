@@ -37,11 +37,33 @@ async function main() {
   const cc2 = await prisma.costCenter.create({ data: { code: 'CC-HR', name: 'Human Resources', budget: 500000, fiscalYear: '2025' } });
   const cc3 = await prisma.costCenter.create({ data: { code: 'CC-SALE', name: 'Sales & Marketing', budget: 2000000, fiscalYear: '2025' } });
 
-  // 3. Departments
-  const dept1 = await prisma.department.create({ data: { code: 'IT01', name: 'IT Support', costCenterId: cc1.id } });
-  const dept2 = await prisma.department.create({ data: { code: 'HR01', name: 'Human Resources', costCenterId: cc2.id } });
-  const dept3 = await prisma.department.create({ data: { code: 'SAL01', name: 'Sales Domestic', costCenterId: cc3.id } });
-  const dept4 = await prisma.department.create({ data: { code: 'SAL02', name: 'Sales International', costCenterId: cc3.id } });
+  // 3. Departments - Hierarchical Multi-Branch
+  // Level 0 — Company root
+  const hq = await prisma.department.create({ data: { code: 'HQ', name: 'สำนักงานใหญ่', type: 'Company', parentId: null } });
+
+  // Level 1 — Regions + HQ Division
+  const regC = await prisma.department.create({ data: { code: 'REG-C', name: 'ภาคกลาง', type: 'Region', parentId: hq.id } });
+  const regN = await prisma.department.create({ data: { code: 'REG-N', name: 'ภาคเหนือ', type: 'Region', parentId: hq.id } });
+  const divHq = await prisma.department.create({ data: { code: 'DIV-HQ', name: 'ฝ่ายสนับสนุน HQ', type: 'Division', parentId: hq.id } });
+
+  // Level 2 — Branches under regions
+  const bkk = await prisma.department.create({ data: { code: 'BKK', name: 'สาขากรุงเทพ', type: 'Branch', parentId: regC.id } });
+  const cnx = await prisma.department.create({ data: { code: 'CNX', name: 'สาขาเชียงใหม่', type: 'Branch', parentId: regN.id } });
+  const lpg = await prisma.department.create({ data: { code: 'LPG', name: 'สาขาลำปาง', type: 'Branch', parentId: regN.id } });
+
+  // Level 3 — Departments under branches
+  const bkkHr = await prisma.department.create({ data: { code: 'BKK-HR', name: 'HR กรุงเทพ', type: 'Department', parentId: bkk.id, costCenterId: cc2.id } });
+  const bkkIt = await prisma.department.create({ data: { code: 'BKK-IT', name: 'IT กรุงเทพ', type: 'Department', parentId: bkk.id, costCenterId: cc1.id } });
+  const cnxHr = await prisma.department.create({ data: { code: 'CNX-HR', name: 'HR เชียงใหม่', type: 'Department', parentId: cnx.id, costCenterId: cc2.id } });
+  const cnxIt = await prisma.department.create({ data: { code: 'CNX-IT', name: 'IT เชียงใหม่', type: 'Department', parentId: cnx.id, costCenterId: cc1.id } });
+
+  // Level 4 — Sections (optional, for depth test)
+  const cnxItSup = await prisma.department.create({ data: { code: 'CNX-IT-SUP', name: 'IT Support เชียงใหม่', type: 'Section', parentId: cnxIt.id, costCenterId: cc1.id } });
+
+  // For compatibility with previous code, alias the leaf nodes
+  const dept1 = bkkIt;
+  const dept2 = bkkHr;
+  const dept3 = cnxItSup;
 
   // 4. Positions
   const pos1 = await prisma.position.create({ data: { code: 'POS01', name: 'Software Engineer', deptId: dept1.id, level: 'Junior', salary: 35000 } });
@@ -77,15 +99,24 @@ async function main() {
   const hrHash = await bcrypt.hash('hr123', 10);
   const empHash = await bcrypt.hash('emp123', 10);
 
-  await prisma.user.create({
-    data: { email: 'admin@company.com', password: adminHash, role: 'superadmin', empId: emp1.id }
+  const adminRole = await prisma.role.findFirst({ where: { code: 'SUPER_ADMIN' } });
+  const hrRole = await prisma.role.findFirst({ where: { code: 'HR_DIRECTOR' } });
+  const empRole = await prisma.role.findFirst({ where: { code: 'EMPLOYEE' } });
+
+  const adminUser = await prisma.user.create({
+    data: { email: 'admin@company.com', password: adminHash, empId: emp1.id }
   });
-  await prisma.user.create({
-    data: { email: 'hr@company.com', password: hrHash, role: 'hr_admin', empId: emp2.id }
+  if (adminRole) await prisma.userRole.create({ data: { userId: adminUser.id, roleId: adminRole.id } });
+
+  const hrUser = await prisma.user.create({
+    data: { email: 'hr@company.com', password: hrHash, empId: emp2.id }
   });
-  await prisma.user.create({
-    data: { email: 'emp@company.com', password: empHash, role: 'user', empId: emp3.id }
+  if (hrRole) await prisma.userRole.create({ data: { userId: hrUser.id, roleId: hrRole.id } });
+
+  const empUser = await prisma.user.create({
+    data: { email: 'emp@company.com', password: empHash, empId: emp3.id }
   });
+  if (empRole) await prisma.userRole.create({ data: { userId: empUser.id, roleId: empRole.id } });
 
   console.log('Seeding completed! You can log in with:');
   console.log('👑 Admin: admin@company.com / admin123');
