@@ -147,6 +147,16 @@ export const setDataScope = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const { departmentIds, costCenterIds, employeeTypes, jobGrades } = req.body;
 
+    // Validate: all deptIds must exist and be active
+    if (departmentIds?.length > 0) {
+      const valid = await prisma.department.count({
+        where: { id: { in: departmentIds }, status: 'active' }
+      });
+      if (valid !== departmentIds.length) {
+        return res.status(400).json({ message: 'One or more department IDs are invalid' });
+      }
+    }
+
     const scope = await prisma.dataScope.upsert({
       where: { userId: Number(id) },
       update: {
@@ -163,8 +173,21 @@ export const setDataScope = async (req: AuthRequest, res: Response) => {
         jobGrades: jobGrades ? JSON.stringify(jobGrades) : null
       }
     });
+
+    await writeAudit({
+      userId: req.user!.id,
+      action: 'UPDATE',
+      module: 'access_control',
+      recordId: String(id),
+      details: `Updated DataScope for user ${id}: depts=${JSON.stringify(departmentIds)}`,
+      ipAddress: req.ip ? String(req.ip) : undefined
+    });
+
     res.json(scope);
-  } catch { res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { 
+    console.error('setDataScope error:', error);
+    res.status(500).json({ message: 'Server error' }); 
+  }
 };
 
 // ── Set PayrollScope for a user ───────────────────────────────────────
