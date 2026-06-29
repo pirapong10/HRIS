@@ -118,11 +118,20 @@ model Employee {
   salary      Float    @default(0)
   bank        String?
   bankAcc     String?
+  nationalId  String?   // เลขบัตรประชาชน / passport
+  ssoNumber   String?   // เลขผู้ประกันตน
+  taxId       String?   // เลขประจำตัวผู้เสียภาษี
+  taxMethod   String?   @default("progressive")
+  address     String?   // ที่อยู่
   
   // Emergency Contact
   emName      String?
   emRel       String?
   emPhone     String?
+
+  // International fields
+  workCountry String?  // ISO 3166-1 alpha-2: country where employee physically works
+  taxCountry  String?  // ISO 3166-1 alpha-2: country for tax/SSO calculation
 
   deptId      Int?
   posId       Int?
@@ -159,7 +168,7 @@ model Department {
   id            Int      @id @default(autoincrement())
   code          String   @unique
   name          String
-  type          String   @default("Department") // Supported: Company | Region | Branch | Division | Department | Section | Team
+  type          String   @default("Department") // Supported: Country | Company | Region | Branch | Division | Department | Section | Team
   description   String?
   parentId      Int?
   parent        Department?  @relation("SubDepts", fields: [parentId], references: [id])
@@ -170,6 +179,11 @@ model Department {
   
   costCenterId  Int?
   costCenter    CostCenter?  @relation(fields: [costCenterId], references: [id])
+  
+  // International fields
+  countryCode   String?  // ISO 3166-1 alpha-2: TH, JP, US, SG, etc.
+  currency      String?  // ISO 4217: THB, JPY, USD, SGD, etc.
+  timezone      String?  // IANA timezone: Asia/Bangkok, Asia/Tokyo, etc.
   
   status        String   @default("active") // active, inactive
   createdAt     DateTime @default(now())
