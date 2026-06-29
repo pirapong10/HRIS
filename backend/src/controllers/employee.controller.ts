@@ -14,13 +14,57 @@ export const getEmployees = async (req: AuthRequest, res: Response) => {
     const skip = (page - 1) * limit;
     const search = req.query.search as string;
 
-    const finalWhere: any = { ...scopeWhere };
+    // If scopeWhere is { id: -1 } (DENIED), return empty result immediately
+    if (scopeWhere && scopeWhere.id === -1) {
+      return res.json({ data: [], total: 0, page, limit });
+    }
+
+    // Process filter parameters
+    const deptId = req.query.deptId ? Number(req.query.deptId) : undefined;
+    const type = req.query.type as string;
+    const status = req.query.status as string; // undefined, '', 'active', 'inactive'
+
+    const statusFilter = status !== undefined && status !== '' ? status : (status === undefined ? 'active' : undefined);
+
+    // Merge safely — don't overwrite top-level scopeWhere keys
+    const finalWhere: any = {
+      ...scopeWhere,
+      ...(statusFilter ? { status: statusFilter } : {}),
+    };
+
     if (search) {
-      finalWhere.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { empCode: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } }
+      finalWhere.AND = [
+        ...(finalWhere.AND || []),
+        {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' } },
+            { empCode: { contains: search, mode: 'insensitive' } },
+            { email: { contains: search, mode: 'insensitive' } }
+          ]
+        }
       ];
+    }
+
+    if (deptId) {
+      if (finalWhere.deptId && finalWhere.deptId.in) {
+        const scopeDepts = finalWhere.deptId.in as number[];
+        if (scopeDepts.includes(deptId)) {
+          finalWhere.deptId = deptId;
+        }
+      } else if (!finalWhere.deptId) {
+        finalWhere.deptId = deptId;
+      }
+    }
+
+    if (type) {
+      if (finalWhere.type && finalWhere.type.in) {
+        const scopeTypes = finalWhere.type.in as string[];
+        if (scopeTypes.includes(type)) {
+          finalWhere.type = type;
+        }
+      } else if (!finalWhere.type) {
+        finalWhere.type = type;
+      }
     }
 
     const [employees, total] = await Promise.all([
@@ -69,15 +113,62 @@ export const createEmployee = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: 'Server error', details: error.message });
   }
 };
-
 export const updateEmployee = async (req: AuthRequest, res: Response) => {
   try {
     const employeeId = Number(req.params.id);
     const { id, department, position, shift, createdAt, updatedAt, ...data } = req.body;
+
+    const current = await prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { salary: true, posId: true, deptId: true, name: true }
+    });
+
     const employee = await prisma.employee.update({
       where: { id: employeeId },
       data
     });
+
+    // Track salary change
+    if (current && data.salary !== undefined && Number(data.salary) !== current.salary) {
+      await prisma.empHistory.create({
+        data: {
+          empId: employeeId,
+          date: new Date().toISOString().split('T')[0],
+          type: 'salary',
+          oldVal: String(current.salary),
+          newVal: String(data.salary),
+          remark: `Updated by user ${req.user?.id || 'System'}`
+        }
+      });
+    }
+
+    // Track position change
+    if (current && data.posId !== undefined && (data.posId === null ? null : Number(data.posId)) !== current.posId) {
+      await prisma.empHistory.create({
+        data: {
+          empId: employeeId,
+          date: new Date().toISOString().split('T')[0],
+          type: 'position',
+          oldVal: String(current.posId || ''),
+          newVal: String(data.posId || ''),
+          remark: `Updated by user ${req.user?.id || 'System'}`
+        }
+      });
+    }
+
+    // Track department change
+    if (current && data.deptId !== undefined && (data.deptId === null ? null : Number(data.deptId)) !== current.deptId) {
+      await prisma.empHistory.create({
+        data: {
+          empId: employeeId,
+          date: new Date().toISOString().split('T')[0],
+          type: 'department',
+          oldVal: String(current.deptId || ''),
+          newVal: String(data.deptId || ''),
+          remark: `Updated by user ${req.user?.id || 'System'}`
+        }
+      });
+    }
 
     if (req.user) {
       await writeAudit({
