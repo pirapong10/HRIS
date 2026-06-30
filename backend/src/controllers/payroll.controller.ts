@@ -4,7 +4,7 @@ import { buildPayrollWhereClause } from '../utils/scopeFilter';
 import { AuthRequest } from '../middlewares/auth.middleware';
 
 import { runPayrollEngine } from '../utils/payrollEngine';
-import { calcThaiTax, calcOTPay, calcSso } from '../utils/payroll';
+
 import { writeAudit } from '../utils/audit';
 
 function getLastBusinessDay(period: string): string {
