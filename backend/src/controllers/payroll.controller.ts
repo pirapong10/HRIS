@@ -3,6 +3,7 @@ import { prisma } from '../prisma';
 import { buildPayrollWhereClause } from '../utils/scopeFilter';
 import { AuthRequest } from '../middlewares/auth.middleware';
 
+import { runPayrollEngine } from '../utils/payrollEngine';
 import { calcThaiTax, calcOTPay, calcSso } from '../utils/payroll';
 import { writeAudit } from '../utils/audit';
 
@@ -70,8 +71,7 @@ export const runPayroll = async (req: AuthRequest, res: Response) => {
     const payrollResults = [];
 
     for (const emp of employees) {
-      // Find OT hours from attendance (mock or fetch from DB)
-      // Fetch OT from OT model
+      // Find OT hours from attendance
       const ots = await prisma.oT.findMany({
         where: {
           empId: emp.id,
@@ -81,51 +81,49 @@ export const runPayroll = async (req: AuthRequest, res: Response) => {
       });
       const otHours = ots.reduce((sum, o) => sum + o.requestedHours, 0);
 
-      const currentMonthGross = emp.salary + calcOTPay(emp, otHours, false, emp.shift, settings);
-      
-      const { sso, employerSso } = calcSso(emp.salary, settings);
-      
-      const providentFund = Math.round(emp.salary * 0.05);
-      const loan = emp.id === 1 ? 1500 : 0; // Mock loan
-
-      const pastYtdIncome = emp.salary * pastMonths;
-      const projectedAnnualIncome = pastYtdIncome + currentMonthGross + (emp.salary * remainingMonths);
-      
-      const annualSso = sso * 12;
-      const annualPvf = providentFund * 12;
-
-      const totalAnnualTax = calcThaiTax(projectedAnnualIncome, annualSso, annualPvf);
-      const pastAnnualTax = calcThaiTax(emp.salary * 12, sso * 12, providentFund * 12);
-      const pastMonthlyTax = Math.round(pastAnnualTax / 12);
-      const pastYtdTax = pastMonthlyTax * pastMonths;
-      
-      let currentTax = Math.round((totalAnnualTax - pastYtdTax) / (remainingMonths + 1));
-      if (currentTax < 0) currentTax = 0;
-
-      const net = currentMonthGross - currentTax - sso - providentFund - loan;
-
-      payrollResults.push({
-        payrollRunId: payrollRun.id,
-        empId: emp.id,
-        gross: currentMonthGross,
-        otHours,
-        otPay: calcOTPay(emp, otHours, false, emp.shift, settings),
-        baseSalary: emp.salary,
-        tax: currentTax,
-        sso,
-        employerSso,
-        providentFund,
-        loan,
-        other_deduct: 0,
-        net,
-        status: "paid",
-        paidDate: `${period}-30`
+      const activeLoan = await prisma.employeeLoan.findFirst({
+        where: { empId: emp.id, status: 'active' }
       });
-    }
+      const loanDeduct = activeLoan ? Math.min(activeLoan.monthlyDeduct, activeLoan.remainingBal) : 0;
 
-    await prisma.payrollRunDetail.createMany({
-      data: payrollResults
-    });
+      const baseVariables = {
+        Salary: emp.salary,
+        OTHours: otHours,
+        LateMinutes: 0,
+        LoanDeduction: loanDeduct,
+      };
+
+      const result = await runPayrollEngine(baseVariables);
+
+      const detail = await prisma.payrollRunDetail.create({
+        data: {
+          payrollRunId: payrollRun.id,
+          empId: emp.id,
+          gross: result.gross,
+          otHours: otHours,
+          otPay: result.computed.OT_PAY || 0,
+          baseSalary: result.computed.BASIC || emp.salary,
+          tax: result.computed.TAX || 0,
+          sso: result.computed.SSO || 0,
+          employerSso: result.computed.SSO || 0,
+          providentFund: result.computed.PVF || 0,
+          loan: result.computed.LOAN_DED || 0,
+          other_deduct: 0,
+          net: result.net,
+          status: "paid",
+          paidDate: getLastBusinessDay(period),
+          componentResults: {
+            create: result.results.map(r => ({
+              componentId: r.componentId,
+              amount: r.amount,
+              formulaUsed: r.formulaUsed
+            }))
+          }
+        },
+        include: { componentResults: true }
+      });
+      payrollResults.push(detail);
+    }
 
     const totalGross = payrollResults.reduce((s, r) => s + r.gross, 0);
     const totalNet = payrollResults.reduce((s, r) => s + r.net, 0);
