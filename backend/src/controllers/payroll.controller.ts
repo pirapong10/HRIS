@@ -6,6 +6,20 @@ import { AuthRequest } from '../middlewares/auth.middleware';
 import { calcThaiTax, calcOTPay, calcSso } from '../utils/payroll';
 import { writeAudit } from '../utils/audit';
 
+function getLastBusinessDay(period: string): string {
+  const [year, month] = period.split('-').map(Number);
+  const lastDay = new Date(year, month, 0); // last day of month
+  
+  const dow = lastDay.getDay();
+  if (dow === 0) lastDay.setDate(lastDay.getDate() - 2); // Sun -> Fri
+  if (dow === 6) lastDay.setDate(lastDay.getDate() - 1); // Sat -> Fri
+  
+  // Format as YYYY-MM-DD local
+  const offset = lastDay.getTimezoneOffset();
+  const localDate = new Date(lastDay.getTime() - (offset * 60 * 1000));
+  return localDate.toISOString().split('T')[0];
+}
+
 export const runPayroll = async (req: AuthRequest, res: Response) => {
   try {
     const { period } = req.body;
