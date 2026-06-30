@@ -12,6 +12,9 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  },
   "type": "commonjs",
   "dependencies": {
     "@prisma/client": "^5.11.0",
@@ -22,6 +25,7 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2",
     "jsonwebtoken": "^9.0.3",
+    "mathjs": "^15.2.0",
     "qrcode": "^1.5.4",
     "redis": "^6.0.1",
     "speakeasy": "^2.0.0",
