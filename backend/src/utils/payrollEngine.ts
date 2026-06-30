@@ -55,6 +55,11 @@ export async function runPayrollEngine(
       if (comp.calcMethod === 'function') {
         const fn = PAYROLL_FUNCTIONS[comp.functionName!];
         if (!fn) throw new Error(`Unknown function: "${comp.functionName}"`);
+        
+        if (comp.functionName === 'calculateThaiTax' && computed['SSO'] === undefined) {
+          throw new Error("TAX component requires SSO to be calculated first. Check sortOrder: SSO must run before TAX.");
+        }
+
         console.log(`[Engine Debug] Calling ${comp.functionName} with scope.TaxableIncome:`, scope.TaxableIncome);
         amount = fn(scope);
       } else {
