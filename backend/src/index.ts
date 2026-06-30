@@ -21,20 +21,31 @@ import shiftRoutes from './routes/shift.routes';
 import mfaRoutes from './routes/mfa.routes';
 import otRoutes from './routes/ot.routes';
 import authGroupRoutes from './routes/authGroup.routes';
+import payrollComponentRoutes from './routes/payrollComponent.routes';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
+const ALLOWED_ORIGINS = ['http://localhost:5173', 'http://localhost:5174'];
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
 app.use(express.json());
 app.use(cookieParser());
 
 // Global API Rate Limiter
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 200, // Limit each IP to 200 requests per `window`
+  max: process.env.NODE_ENV === 'production' ? 200 : 5000, // Limit each IP to 200 in prod, 5000 in dev
   message: { message: 'Too many requests from this IP, please try again after 15 minutes' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -57,6 +68,7 @@ app.use('/api/shifts', shiftRoutes);
 app.use('/api/mfa', mfaRoutes);
 app.use('/api/ot', otRoutes);
 app.use('/api/auth-groups', authGroupRoutes);
+app.use('/api/payroll-components', payrollComponentRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', message: 'HRIS API is running' });
