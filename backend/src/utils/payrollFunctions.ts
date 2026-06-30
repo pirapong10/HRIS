@@ -20,22 +20,27 @@ const TAX_BRACKETS = [
  *
  * Input vars:
  *   vars.TaxableIncome — monthly taxable gross (sum of taxable earning components)
+ *   vars.SSO — monthly SSO deduction (if any)
+ *   vars.PVF — monthly PVF deduction (if any)
  *
  * Logic (mirrors calcThaiTax in utils/payroll.ts):
  *   1. Annualise: annualGross = TaxableIncome * 12
  *   2. Apply expense deduction: min(annualGross * 0.5, 100,000)
  *   3. Apply personal deduction: 60,000
- *   4. Apply progressive brackets
- *   5. Divide annual tax by 12 → return monthly WHT (rounded)
- *
- * Note: SSO/PVF deductions are separate components — not double-deducted here.
+ *   4. Deduct annual SSO & PVF
+ *   5. Apply progressive brackets
+ *   6. Divide annual tax by 12 → return monthly WHT (rounded)
  */
 function calculateThaiTax(vars: Record<string, number>): number {
   const monthly = vars.TaxableIncome || 0;
   const annualGross = monthly * 12;
   const deductExpense = Math.min(annualGross * 0.5, 100000);
   const deductPersonal = 60000;
-  const taxable = Math.max(0, annualGross - deductExpense - deductPersonal);
+  
+  const annualSso = (vars.SSO || 0) * 12;
+  const annualPvf = (vars.PVF || 0) * 12;
+  
+  const taxable = Math.max(0, annualGross - deductExpense - deductPersonal - annualSso - annualPvf);
 
   let annualTax = 0;
   for (const b of TAX_BRACKETS) {

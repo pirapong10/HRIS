@@ -55,6 +55,7 @@ export async function runPayrollEngine(
       if (comp.calcMethod === 'function') {
         const fn = PAYROLL_FUNCTIONS[comp.functionName!];
         if (!fn) throw new Error(`Unknown function: "${comp.functionName}"`);
+        console.log(`[Engine Debug] Calling ${comp.functionName} with scope.TaxableIncome:`, scope.TaxableIncome);
         amount = fn(scope);
       } else {
         // formula — inject convenience helpers into mathjs scope
