@@ -174,6 +174,16 @@ async function upsertPayrollComponents() {
       sortOrder: 4,
     },
     {
+      code: 'PVF',
+      name: 'กองทุนสำรองเลี้ยงชีพ',
+      type: 'deduction',
+      calcMethod: 'formula',
+      formula: 'BASIC * 0.05',
+      isTaxable: false,
+      isSSOBase: false,
+      sortOrder: 4.5,
+    },
+    {
       code: 'TAX',
       name: 'ภาษีหัก ณ ที่จ่าย',
       type: 'deduction',
@@ -192,6 +202,16 @@ async function upsertPayrollComponents() {
       isTaxable: false,
       isSSOBase: false,
       sortOrder: 6,
+    },
+    {
+      code: 'LOAN_DED',
+      name: 'หักเงินกู้',
+      type: 'deduction',
+      calcMethod: 'formula',
+      formula: 'LoanDeduction',
+      isTaxable: false,
+      isSSOBase: false,
+      sortOrder: 7,
     },
   ];
 
