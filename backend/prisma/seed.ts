@@ -37,27 +37,30 @@ async function main() {
   const cc2 = await prisma.costCenter.create({ data: { code: 'CC-HR', name: 'Human Resources', budget: 500000, fiscalYear: '2025' } });
   const cc3 = await prisma.costCenter.create({ data: { code: 'CC-SALE', name: 'Sales & Marketing', budget: 2000000, fiscalYear: '2025' } });
 
-  // 3. Departments - Hierarchical Multi-Branch
-  // Level 0 — Company root
-  const hq = await prisma.department.create({ data: { code: 'HQ', name: 'สำนักงานใหญ่', type: 'Company', parentId: null } });
+  // 3. Departments - Hierarchical Multi-Branch with International support
+  // Level 0 — Country root (Phase A: International)
+  const thailand = await prisma.department.create({ data: { code: 'TH', name: 'Thailand', type: 'Country', parentId: null, countryCode: 'TH', currency: 'THB', timezone: 'Asia/Bangkok' } });
 
-  // Level 1 — Regions + HQ Division
+  // Level 1 — Company under Country
+  const hq = await prisma.department.create({ data: { code: 'HQ', name: 'สำนักงานใหญ่', type: 'Company', parentId: thailand.id, countryCode: 'TH', currency: 'THB', timezone: 'Asia/Bangkok' } });
+
+  // Level 2 — Regions + HQ Division
   const regC = await prisma.department.create({ data: { code: 'REG-C', name: 'ภาคกลาง', type: 'Region', parentId: hq.id } });
   const regN = await prisma.department.create({ data: { code: 'REG-N', name: 'ภาคเหนือ', type: 'Region', parentId: hq.id } });
   const divHq = await prisma.department.create({ data: { code: 'DIV-HQ', name: 'ฝ่ายสนับสนุน HQ', type: 'Division', parentId: hq.id } });
 
-  // Level 2 — Branches under regions
-  const bkk = await prisma.department.create({ data: { code: 'BKK', name: 'สาขากรุงเทพ', type: 'Branch', parentId: regC.id } });
-  const cnx = await prisma.department.create({ data: { code: 'CNX', name: 'สาขาเชียงใหม่', type: 'Branch', parentId: regN.id } });
-  const lpg = await prisma.department.create({ data: { code: 'LPG', name: 'สาขาลำปาง', type: 'Branch', parentId: regN.id } });
+  // Level 3 — Branches under regions (inherit country from parent)
+  const bkk = await prisma.department.create({ data: { code: 'BKK', name: 'สาขากรุงเทพ', type: 'Branch', parentId: regC.id, countryCode: 'TH', currency: 'THB', timezone: 'Asia/Bangkok' } });
+  const cnx = await prisma.department.create({ data: { code: 'CNX', name: 'สาขาเชียงใหม่', type: 'Branch', parentId: regN.id, countryCode: 'TH', currency: 'THB', timezone: 'Asia/Bangkok' } });
+  const lpg = await prisma.department.create({ data: { code: 'LPG', name: 'สาขาลำปาง', type: 'Branch', parentId: regN.id, countryCode: 'TH', currency: 'THB', timezone: 'Asia/Bangkok' } });
 
-  // Level 3 — Departments under branches
+  // Level 4 — Departments under branches
   const bkkHr = await prisma.department.create({ data: { code: 'BKK-HR', name: 'HR กรุงเทพ', type: 'Department', parentId: bkk.id, costCenterId: cc2.id } });
   const bkkIt = await prisma.department.create({ data: { code: 'BKK-IT', name: 'IT กรุงเทพ', type: 'Department', parentId: bkk.id, costCenterId: cc1.id } });
   const cnxHr = await prisma.department.create({ data: { code: 'CNX-HR', name: 'HR เชียงใหม่', type: 'Department', parentId: cnx.id, costCenterId: cc2.id } });
   const cnxIt = await prisma.department.create({ data: { code: 'CNX-IT', name: 'IT เชียงใหม่', type: 'Department', parentId: cnx.id, costCenterId: cc1.id } });
 
-  // Level 4 — Sections (optional, for depth test)
+  // Level 5 — Sections (optional, for depth test)
   const cnxItSup = await prisma.department.create({ data: { code: 'CNX-IT-SUP', name: 'IT Support เชียงใหม่', type: 'Section', parentId: cnxIt.id, costCenterId: cc1.id } });
 
   // For compatibility with previous code, alias the leaf nodes
@@ -122,6 +125,84 @@ async function main() {
   console.log('👑 Admin: admin@company.com / admin123');
   console.log('👩💼 HR: hr@company.com / hr123');
   console.log('👤 Emp: emp@company.com / emp123');
+
+  // Seed default payroll components (idempotent via upsert)
+  await upsertPayrollComponents();
+  console.log('✅ Default payroll components seeded.');
+}
+
+async function upsertPayrollComponents() {
+  const components = [
+    {
+      code: 'BASIC',
+      name: 'เงินเดือนฐาน',
+      type: 'earning',
+      calcMethod: 'formula',
+      formula: 'Salary',
+      isTaxable: true,
+      isSSOBase: true,
+      sortOrder: 1,
+    },
+    {
+      code: 'OT_PAY',
+      name: 'ค่าล่วงเวลา',
+      type: 'earning',
+      calcMethod: 'formula',
+      formula: '(Salary / 30 / 8) * OTHours * 1.5',
+      isTaxable: true,
+      isSSOBase: false,
+      sortOrder: 2,
+    },
+    {
+      code: 'BONUS',
+      name: 'โบนัส',
+      type: 'earning',
+      calcMethod: 'formula',
+      formula: '0',
+      isTaxable: true,
+      isSSOBase: false,
+      sortOrder: 3,
+    },
+    {
+      code: 'SSO',
+      name: 'ประกันสังคม',
+      type: 'deduction',
+      calcMethod: 'formula',
+      formula: 'MIN(BASIC * 0.05, 750)',
+      isTaxable: false,
+      isSSOBase: false,
+      sortOrder: 4,
+    },
+    {
+      code: 'TAX',
+      name: 'ภาษีหัก ณ ที่จ่าย',
+      type: 'deduction',
+      calcMethod: 'function',
+      functionName: 'calculateThaiTax',
+      isTaxable: false,
+      isSSOBase: false,
+      sortOrder: 5,
+    },
+    {
+      code: 'LATE_DED',
+      name: 'หักมาสาย',
+      type: 'deduction',
+      calcMethod: 'formula',
+      formula: '(Salary / 30 / 8 / 60) * LateMinutes',
+      isTaxable: false,
+      isSSOBase: false,
+      sortOrder: 6,
+    },
+  ];
+
+  for (const comp of components) {
+    await prisma.payrollComponent.upsert({
+      where: { code: comp.code },
+      update: { ...comp },
+      create: { ...comp },
+    });
+    console.log(`  → Upserted component: ${comp.code} (${comp.name})`);
+  }
 }
 
 main()
