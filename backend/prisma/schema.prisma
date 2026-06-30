@@ -347,7 +347,48 @@ model PayrollRunDetail {
   status        String   @default("paid")
   paidDate      String?
 
+  componentResults PayrollComponentResult[]
+
   @@index([payrollRunId, empId])
+}
+
+model PayrollVariable {
+  id          Int     @id @default(autoincrement())
+  code        String  @unique
+  name        String
+  source      String  // "employee" | "attendance" | "manual" | "computed"
+  sourceField String?
+  dataType    String  @default("number")
+  description String?
+}
+
+model PayrollComponent {
+  id           Int      @id @default(autoincrement())
+  code         String   @unique
+  name         String
+  type         String                // "earning" | "deduction"
+  calcMethod   String   @default("formula") // "formula" | "function"
+  formula      String?
+  functionName String?
+  isTaxable    Boolean  @default(true)
+  isSSOBase    Boolean  @default(false)
+  sortOrder    Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  results      PayrollComponentResult[]
+}
+
+model PayrollComponentResult {
+  id              Int    @id @default(autoincrement())
+  payrollDetailId Int
+  componentId     Int
+  amount          Float
+  formulaUsed     String
+
+  payrollDetail   PayrollRunDetail @relation(fields: [payrollDetailId], references: [id], onDelete: Cascade)
+  component       PayrollComponent @relation(fields: [componentId], references: [id])
 }
 
 model EmpDoc {
