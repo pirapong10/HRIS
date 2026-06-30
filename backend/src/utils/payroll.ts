@@ -1,13 +1,13 @@
 // Thai progressive tax brackets (annual)
 export const TAX_BRACKETS = [
-  { min: 0, max: 150000, rate: 0 },
-  { min: 150001, max: 300000, rate: 0.05 },
-  { min: 300001, max: 500000, rate: 0.10 },
-  { min: 500001, max: 750000, rate: 0.15 },
-  { min: 750001, max: 1000000, rate: 0.20 },
-  { min: 1000001, max: 2000000, rate: 0.25 },
-  { min: 2000001, max: 5000000, rate: 0.30 },
-  { min: 5000001, max: Infinity, rate: 0.35 },
+  { min: 0,       max: 150000,   rate: 0 },
+  { min: 150000,  max: 300000,   rate: 0.05 },
+  { min: 300000,  max: 500000,   rate: 0.10 },
+  { min: 500000,  max: 750000,   rate: 0.15 },
+  { min: 750000,  max: 1000000,  rate: 0.20 },
+  { min: 1000000, max: 2000000,  rate: 0.25 },
+  { min: 2000000, max: 5000000,  rate: 0.30 },
+  { min: 5000000, max: Infinity, rate: 0.35 },
 ];
 
 export function calcThaiTax(annualIncome: number, annualSso: number = 0, annualPvf: number = 0): number {
