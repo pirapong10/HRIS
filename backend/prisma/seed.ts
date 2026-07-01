@@ -102,6 +102,39 @@ async function main() {
   const hrHash = await bcrypt.hash('hr123', 10);
   const empHash = await bcrypt.hash('emp123', 10);
 
+  // Ensure basic permissions exist
+  const permCodes = ['settings:view', 'settings:create', 'settings:edit', 'settings:delete'];
+  for (const p of permCodes) {
+    const action = p.split(':')[1];
+    await prisma.permission.upsert({
+      where: { code: p },
+      update: {},
+      create: { code: p, module: 'settings', action: action, description: `Permission for ${p}` }
+    });
+  }
+
+  // Ensure SUPER_ADMIN role exists
+  const superAdminRole = await prisma.role.upsert({
+    where: { code: 'SUPER_ADMIN' },
+    update: {},
+    create: { code: 'SUPER_ADMIN', name: 'Super Administrator', level: 100, description: 'Has all permissions' }
+  });
+
+  // Assign settings permissions to SUPER_ADMIN
+  for (const p of permCodes) {
+    const perm = await prisma.permission.findUnique({ where: { code: p } });
+    if (perm) {
+      const exists = await prisma.rolePermission.findUnique({
+        where: { roleId_permissionId: { roleId: superAdminRole.id, permissionId: perm.id } }
+      });
+      if (!exists) {
+        await prisma.rolePermission.create({
+          data: { roleId: superAdminRole.id, permissionId: perm.id }
+        });
+      }
+    }
+  }
+
   const adminRole = await prisma.role.findFirst({ where: { code: 'SUPER_ADMIN' } });
   const hrRole = await prisma.role.findFirst({ where: { code: 'HR_DIRECTOR' } });
   const empRole = await prisma.role.findFirst({ where: { code: 'EMPLOYEE' } });
