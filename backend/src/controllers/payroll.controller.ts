@@ -56,84 +56,99 @@ export const runPayroll = async (req: AuthRequest, res: Response) => {
     // Temporary settings (should come from DB)
     const settings = { ssoBaseCap: 17500, ssoRate: 5 };
 
-    // Create or find PayrollRun
     const payrollRun = await prisma.payrollRun.upsert({
       where: { period },
       update: {},
       create: { period, status: 'draft' }
     });
 
-    // Clean up old details for this run to re-calculate
-    await prisma.payrollRunDetail.deleteMany({
-      where: { payrollRunId: payrollRun.id }
-    });
-
-    const payrollResults = [];
-
-    for (const emp of employees) {
-      // Find OT hours from attendance
-      const ots = await prisma.oT.findMany({
-        where: {
-          empId: emp.id,
-          date: { startsWith: period },
-          status: 'approved'
-        }
+    const payrollResults = await prisma.$transaction(async (tx) => {
+      // Clean up old details for this run to re-calculate
+      await tx.payrollRunDetail.deleteMany({
+        where: { payrollRunId: payrollRun.id }
       });
-      const otHours = ots.reduce((sum, o) => sum + o.requestedHours, 0);
 
-      const activeLoan = await prisma.employeeLoan.findFirst({
-        where: { empId: emp.id, status: 'active' }
-      });
-      const loanDeduct = activeLoan ? Math.min(activeLoan.monthlyDeduct, activeLoan.remainingBal) : 0;
+      const results = [];
 
-      const baseVariables = {
-        Salary: emp.salary,
-        OTHours: otHours,
-        LateMinutes: 0,
-        LoanDeduction: loanDeduct,
-      };
-
-      const result = await runPayrollEngine(baseVariables);
-
-      const detail = await prisma.payrollRunDetail.create({
-        data: {
-          payrollRunId: payrollRun.id,
-          empId: emp.id,
-          gross: result.gross,
-          otHours: otHours,
-          otPay: result.computed.OT_PAY || 0,
-          baseSalary: result.computed.BASIC || emp.salary,
-          tax: result.computed.TAX || 0,
-          sso: result.computed.SSO || 0,
-          employerSso: result.computed.SSO || 0,
-          providentFund: result.computed.PVF || 0,
-          loan: result.computed.LOAN_DED || 0,
-          other_deduct: 0,
-          net: result.net,
-          status: "paid",
-          paidDate: getLastBusinessDay(period),
-          componentResults: {
-            create: result.results.map(r => ({
-              componentId: r.componentId,
-              amount: r.amount,
-              formulaUsed: r.formulaUsed
-            }))
+      for (const emp of employees) {
+        // Find OT hours from attendance
+        const ots = await tx.oT.findMany({
+          where: {
+            empId: emp.id,
+            date: { startsWith: period },
+            status: 'approved'
           }
-        },
-        include: { componentResults: true }
+        });
+        const otHours = ots.reduce((sum, o) => sum + o.requestedHours, 0);
+
+        const activeLoan = await tx.employeeLoan.findFirst({
+          where: { empId: emp.id, status: 'active' }
+        });
+        const loanDeduct = activeLoan ? Math.min(activeLoan.monthlyDeduct, activeLoan.remainingBal) : 0;
+
+        const baseVariables = {
+          Salary: emp.salary,
+          OTHours: otHours,
+          LateMinutes: 0, // Not tracked yet. LATE_DED always = 0 until attendance clock-in vs shift.startTime is implemented.
+          LoanDeduction: loanDeduct,
+        };
+
+        const result = await runPayrollEngine(baseVariables);
+
+        const detail = await tx.payrollRunDetail.create({
+          data: {
+            payrollRunId: payrollRun.id,
+            empId: emp.id,
+            gross: result.gross,
+            otHours: otHours,
+            otPay: result.computed.OT_PAY || 0,
+            baseSalary: result.computed.BASIC || emp.salary,
+            tax: result.computed.TAX || 0,
+            sso: result.computed.SSO || 0,
+            employerSso: result.computed.SSO || 0,
+            providentFund: result.computed.PVF || 0,
+            loan: result.computed.LOAN_DED || 0,
+            other_deduct: 0,
+            net: result.net,
+            status: "paid",
+            paidDate: getLastBusinessDay(period),
+            componentResults: {
+              create: result.results.map(r => ({
+                componentId: r.componentId,
+                amount: r.amount,
+                formulaUsed: r.formulaUsed
+              }))
+            }
+          },
+          include: { componentResults: true }
+        });
+        results.push(detail);
+
+        // Update Loan balance
+        if (activeLoan && loanDeduct > 0) {
+          const newBal = activeLoan.remainingBal - loanDeduct;
+          await tx.employeeLoan.update({
+            where: { id: activeLoan.id },
+            data: {
+              remainingBal: newBal,
+              status: newBal <= 0 ? 'completed' : 'active'
+            }
+          });
+        }
+      }
+
+      const totalGross = results.reduce((s, r) => s + r.gross, 0);
+      const totalNet = results.reduce((s, r) => s + r.net, 0);
+      const totalTax = results.reduce((s, r) => s + r.tax, 0);
+      const totalSso = results.reduce((s, r) => s + r.sso, 0);
+      const totalEmployerSso = results.reduce((s, r) => s + r.employerSso, 0);
+
+      await tx.payrollRun.update({
+        where: { id: payrollRun.id },
+        data: { totalGross, totalNet, totalTax, totalSso, totalEmployerSso, status: "draft" }
       });
-      payrollResults.push(detail);
-    }
 
-    const totalGross = payrollResults.reduce((s, r) => s + r.gross, 0);
-    const totalNet = payrollResults.reduce((s, r) => s + r.net, 0);
-    const totalTax = payrollResults.reduce((s, r) => s + r.tax, 0);
-    const totalSso = payrollResults.reduce((s, r) => s + r.sso, 0);
-    const totalEmployerSso = payrollResults.reduce((s, r) => s + r.employerSso, 0);
-
-    await prisma.payrollRun.update({
-      where: { id: payrollRun.id },
-      data: { totalGross, totalNet, totalTax, totalSso, totalEmployerSso, status: "draft" }
+      return results;
     });
 
     if (req.user) {
