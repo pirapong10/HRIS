@@ -97,67 +97,99 @@ async function main() {
     }
   });
 
-  // 6. Users (Logins)
-  const adminHash = await bcrypt.hash('admin123', 10);
-  const hrHash = await bcrypt.hash('hr123', 10);
-  const empHash = await bcrypt.hash('emp123', 10);
+  // 6. Users & Roles Setup (Blueprint §4.2)
+  const defaultHash = await bcrypt.hash('admin1234', 10);
 
-  // Ensure basic permissions exist
-  const permCodes = ['settings:view', 'settings:create', 'settings:edit', 'settings:delete'];
-  for (const p of permCodes) {
-    const action = p.split(':')[1];
-    await prisma.permission.upsert({
-      where: { code: p },
-      update: {},
-      create: { code: p, module: 'settings', action: action, description: `Permission for ${p}` }
-    });
-  }
-
-  // Ensure SUPER_ADMIN role exists
-  const superAdminRole = await prisma.role.upsert({
-    where: { code: 'SUPER_ADMIN' },
-    update: {},
-    create: { code: 'SUPER_ADMIN', name: 'Super Administrator', level: 100, description: 'Has all permissions' }
-  });
-
-  // Assign settings permissions to SUPER_ADMIN
-  for (const p of permCodes) {
-    const perm = await prisma.permission.findUnique({ where: { code: p } });
-    if (perm) {
-      const exists = await prisma.rolePermission.findUnique({
-        where: { roleId_permissionId: { roleId: superAdminRole.id, permissionId: perm.id } }
+  // Define 66 Permissions (11 modules * 6 actions)
+  const modules = ['employee', 'attendance', 'leave', 'organization', 'reports', 'dashboard', 'payroll', 'shift', 'ot', 'settings', 'headcount'];
+  const actions = ['view', 'create', 'edit', 'delete', 'approve', 'export'];
+  const permIds: Record<string, number> = {};
+  for (const m of modules) {
+    for (const a of actions) {
+      const code = `${m}:${a}`;
+      const perm = await prisma.permission.upsert({
+        where: { code },
+        update: {},
+        create: { code, module: m, action: a, description: `${a} ${m}` }
       });
-      if (!exists) {
-        await prisma.rolePermission.create({
-          data: { roleId: superAdminRole.id, permissionId: perm.id }
-        });
-      }
+      permIds[code] = perm.id;
     }
   }
 
-  const adminRole = await prisma.role.findFirst({ where: { code: 'SUPER_ADMIN' } });
-  const hrRole = await prisma.role.findFirst({ where: { code: 'HR_DIRECTOR' } });
-  const empRole = await prisma.role.findFirst({ where: { code: 'EMPLOYEE' } });
+  // Define 8 Roles
+  const rolesDef = [
+    { code: 'SUPER_ADMIN', name: 'Super Administrator', level: 100,
+      perms: Object.keys(permIds) }, // All 66
+    { code: 'SYSTEM_ADMIN', name: 'System Administrator', level: 90,
+      perms: Object.keys(permIds).filter(p => !p.startsWith('payroll:')) },
+    { code: 'HR_DIRECTOR', name: 'HR Director', level: 80,
+      perms: Object.keys(permIds).filter(p => p.startsWith('employee:') || p.startsWith('attendance:') || p.startsWith('leave:') || p.startsWith('organization:') || ['reports:view', 'reports:export', 'dashboard:view'].includes(p)) },
+    { code: 'HR_MANAGER', name: 'HR Manager', level: 60,
+      perms: ['employee:view', 'employee:edit', 'attendance:view', 'attendance:edit', 'leave:view', 'leave:approve', 'dashboard:view'] },
+    { code: 'PAYROLL_MANAGER', name: 'Payroll Manager', level: 65,
+      perms: [...Object.keys(permIds).filter(p => p.startsWith('payroll:') || p.startsWith('reports:')), 'employee:view'] },
+    { code: 'PAYROLL_OFFICER', name: 'Payroll Officer', level: 55,
+      perms: ['payroll:view', 'payroll:create', 'payroll:export', 'employee:view'] },
+    { code: 'DEPT_MANAGER', name: 'Department Manager', level: 50,
+      perms: ['employee:view', 'attendance:view', 'leave:view', 'leave:approve', 'shift:view', 'shift:approve', 'ot:view', 'ot:approve', 'dashboard:view'] },
+    { code: 'EMPLOYEE', name: 'Employee', level: 10,
+      perms: ['employee:view', 'attendance:view', 'attendance:create', 'leave:view', 'leave:create', 'ot:view', 'ot:create', 'payroll:view', 'dashboard:view'] }
+  ];
 
-  const adminUser = await prisma.user.create({
-    data: { email: 'admin@company.com', password: adminHash, empId: emp1.id }
-  });
-  if (adminRole) await prisma.userRole.create({ data: { userId: adminUser.id, roleId: adminRole.id } });
+  for (const r of rolesDef) {
+    const role = await prisma.role.upsert({
+      where: { code: r.code },
+      update: { level: r.level, name: r.name },
+      create: { code: r.code, name: r.name, level: r.level, description: r.name }
+    });
+    // Assign permissions
+    for (const p of r.perms) {
+      if (permIds[p]) {
+        await prisma.rolePermission.upsert({
+          where: { roleId_permissionId: { roleId: role.id, permissionId: permIds[p] } },
+          update: {},
+          create: { roleId: role.id, permissionId: permIds[p] }
+        });
+      }
+    }
+    
+    // Create test user and employee for this role
+    const emailPrefix = r.code.toLowerCase();
+    const email = `${emailPrefix}@company.com`;
+    
+    // Create an employee if not exists
+    let testEmp = await prisma.employee.findFirst({ where: { email } });
+    if (!testEmp) {
+      testEmp = await prisma.employee.create({
+        data: {
+          empCode: `E-${r.code}`, name: `Test ${r.name}`, deptId: dept1.id, posId: pos1.id, type: 'fulltime', hireDate: '2023-01-01', dob: '1990-01-01', gender: 'male', salary: 30000, email: email, shiftId: shift1.id
+        }
+      });
+    }
 
-  const hrUser = await prisma.user.create({
-    data: { email: 'hr@company.com', password: hrHash, empId: emp2.id }
-  });
-  if (hrRole) await prisma.userRole.create({ data: { userId: hrUser.id, roleId: hrRole.id } });
+    // Create user
+    let user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      user = await prisma.user.create({
+        data: { email, password: defaultHash, empId: testEmp.id }
+      });
+    } else {
+      await prisma.user.update({ where: { email }, data: { password: defaultHash, empId: testEmp.id } });
+    }
 
-  const empUser = await prisma.user.create({
-    data: { email: 'emp@company.com', password: empHash, empId: emp3.id }
-  });
-  if (empRole) await prisma.userRole.create({ data: { userId: empUser.id, roleId: empRole.id } });
+    // Assign role to user
+    await prisma.userRole.upsert({
+      where: { userId_roleId: { userId: user.id, roleId: role.id } },
+      update: {},
+      create: { userId: user.id, roleId: role.id }
+    });
+  }
 
   console.log('Seeding completed! You can log in with:');
-  console.log('👑 Admin: admin@company.com / admin123');
-  console.log('👩💼 HR: hr@company.com / hr123');
-  console.log('👤 Emp: emp@company.com / emp123');
+  console.log('Password for all test users: admin1234');
+  for (const r of rolesDef) {
+    console.log(`- ${r.name.padEnd(20)}: ${r.code.toLowerCase()}@company.com`);
+  }
 
   // Seed default payroll components (idempotent via upsert)
   await upsertPayrollComponents();
