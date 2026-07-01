@@ -261,3 +261,17 @@ export const exportPayroll = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: 'Server error', details: error.message });
   }
 };
+
+export const getPayrollDetailById = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const detail = await prisma.payrollRunDetail.findUnique({
+      where: { id: parseInt(id as string) },
+      include: { employee: true, components: true }
+    });
+    if (!detail) return res.status(404).json({ message: 'Payroll detail not found' });
+    res.json(detail);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};

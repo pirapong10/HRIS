@@ -127,3 +127,29 @@ export const requireLevel = (minLevel: number) => {
     return res.status(403).json({ message: `Forbidden: insufficient access level` });
   };
 };
+
+export const requireOwnershipOrScope = (
+  model: 'employee' | 'leave' | 'oT' | 'payrollRunDetail',
+  empIdField: string = 'empId'
+) => async (req: AuthRequest, res: Response, next: NextFunction) => {
+  if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+  
+  // Level 80+ bypass (HR_DIRECTOR and above)
+  if (req.user.level >= 80 || req.user.roles.includes('SUPER_ADMIN')) return next();
+  
+  // Scope-level users (HR_MANAGER, PAYROLL_OFFICER etc.) 
+  // already filtered at list level — allow for now
+  if (req.user.level >= 40) return next();
+  
+  // EMPLOYEE level (10) — must be own record
+  if (req.user.level <= 10) {
+    const record = await (prisma[model] as any).findUnique({
+      where: { id: parseInt(req.params.id as string) },
+      select: { [empIdField]: true }
+    });
+    if (!record || record[empIdField] !== req.user.empId) {
+      return res.status(403).json({ message: 'Forbidden: not your record' });
+    }
+  }
+  next();
+};

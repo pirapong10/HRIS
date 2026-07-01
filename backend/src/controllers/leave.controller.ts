@@ -32,6 +32,20 @@ export const getLeaves = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const getLeaveById = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const leave = await prisma.leave.findUnique({
+      where: { id: parseInt(id as string) },
+      include: { employee: true }
+    });
+    if (!leave) return res.status(404).json({ message: 'Leave not found' });
+    res.json(leave);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 export const createLeave = async (req: AuthRequest, res: Response) => {
   try {
     const data = { ...req.body };
