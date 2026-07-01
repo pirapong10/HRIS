@@ -6,21 +6,24 @@ import { AuthRequest } from '../middlewares/auth.middleware';
 export const getOTs = async (req: AuthRequest, res: Response) => {
   try {
     const scopeWhere = req.user ? await buildEmployeeWhereClause(req.user) : {};
+    if (scopeWhere.id === -1) return res.json({ data: [], total: 0, page: 1, limit: 50 });
     
     // Extract pagination from query
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 50;
     const skip = (page - 1) * limit;
 
+    const finalWhere = Object.keys(scopeWhere).length > 0 ? { employee: scopeWhere } : {};
+
     const [ots, total] = await Promise.all([
       prisma.oT.findMany({
-        where: Object.keys(scopeWhere).length > 0 ? { employee: scopeWhere } : {},
+        where: finalWhere,
         include: { employee: true, shift: true },
         skip,
         take: limit,
         orderBy: { date: 'desc' }
       }),
-      prisma.oT.count({ where: Object.keys(scopeWhere).length > 0 ? { employee: scopeWhere } : {} })
+      prisma.oT.count({ where: finalWhere })
     ]);
 
     res.json({ data: ots, total, page, limit });

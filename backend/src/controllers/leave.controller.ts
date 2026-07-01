@@ -6,21 +6,24 @@ import { AuthRequest } from '../middlewares/auth.middleware';
 export const getLeaves = async (req: AuthRequest, res: Response) => {
   try {
     const scopeWhere = req.user ? await buildEmployeeWhereClause(req.user) : {};
+    if (scopeWhere.id === -1) return res.json({ data: [], total: 0, page: 1, limit: 50 });
     
     // Extract pagination from query
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 50;
     const skip = (page - 1) * limit;
 
+    const finalWhere = Object.keys(scopeWhere).length > 0 ? { employee: scopeWhere } : {};
+
     const [leaves, total] = await Promise.all([
       prisma.leave.findMany({
-        where: Object.keys(scopeWhere).length > 0 ? { employee: scopeWhere } : {},
+        where: finalWhere,
         include: { employee: true },
         skip,
         take: limit,
         orderBy: { startDate: 'desc' }
       }),
-      prisma.leave.count({ where: Object.keys(scopeWhere).length > 0 ? { employee: scopeWhere } : {} })
+      prisma.leave.count({ where: finalWhere })
     ]);
 
     res.json({ data: leaves, total, page, limit });

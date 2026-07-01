@@ -6,9 +6,10 @@ import { AuthRequest } from '../middlewares/auth.middleware';
 export const getAttendance = async (req: AuthRequest, res: Response) => {
   try {
     const scopeWhere = req.user ? await buildEmployeeWhereClause(req.user) : {};
+    if (scopeWhere.id === -1) return res.json({ data: [], total: 0, page: 1, limit: 50 });
     
     // We filter attendance records based on the employee scope
-    const whereClause = Object.keys(scopeWhere).length > 0 ? { employee: scopeWhere } : {};
+    const whereClause: any = Object.keys(scopeWhere).length > 0 ? { employee: scopeWhere } : {};
 
     // Extract pagination from query
     const page = parseInt(req.query.page as string) || 1;
