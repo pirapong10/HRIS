@@ -236,29 +236,37 @@ export const approvePayroll = async (req: AuthRequest, res: Response) => {
 
 export const exportPayroll = async (req: AuthRequest, res: Response) => {
   try {
-    if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
     const { id } = req.params;
-
-    const payrollRun = await prisma.payrollRun.findUnique({
-      where: { id: Number(id) }
+    const details = await prisma.payrollRunDetail.findMany({
+      where: { payrollRunId: Number(id) },
+      include: { employee: true }
     });
 
-    if (!payrollRun) return res.status(404).json({ message: 'Not found' });
+    if (details.length === 0) {
+      return res.status(404).json({ message: 'No payroll details found' });
+    }
 
-    await writeAudit({
-      userId: req.user.id,
-      action: 'UPDATE',
-      module: 'payroll',
-      recordId: String(payrollRun.id),
-      details: `Exported bank file for payroll run ${payrollRun.period}`,
-      ipAddress: req.ip ? String(req.ip) : undefined
+    const payrollRun = await prisma.payrollRun.findUnique({ 
+      where: { id: Number(id) } 
     });
 
-    // Mock export response
-    res.json({ message: 'Bank file exported successfully', url: `/downloads/payroll-${id}.csv` });
-  } catch (error: any) {
-    console.error("Export Payroll Error:", error);
-    res.status(500).json({ message: 'Server error', details: error.message });
+    const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    let txt = `0140000000 ${dateStr} COMPANY_NAME\n`;
+    
+    details.forEach(detail => {
+      if (!detail.employee?.bankAcc) return;
+      const bankAcc = detail.employee.bankAcc.replace(/-/g, '').padEnd(15, ' ');
+      const amount = Math.round(detail.net).toString().padStart(10, '0');
+      const empCode = detail.employee?.empCode || '';
+      txt += `${bankAcc} ${amount} ${empCode}\n`;
+    });
+
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', 
+      `attachment; filename="bank_transfer_${payrollRun?.period || id}.txt"`);
+    res.send(txt);
+  } catch (error) {
+    res.status(500).json({ message: 'Export failed' });
   }
 };
 
