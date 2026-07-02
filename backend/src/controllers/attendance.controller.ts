@@ -3,6 +3,7 @@ import { prisma } from '../prisma';
 import { buildEmployeeWhereClause } from '../utils/scopeFilter';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { GeoService } from '../utils/GeoService';
+import ExcelJS from 'exceljs';
 
 export const getAttendance = async (req: AuthRequest, res: Response) => {
   try {
@@ -248,5 +249,58 @@ export const approveCorrection = async (req: AuthRequest, res: Response) => {
     res.json(updated);
   } catch (error: any) {
     res.status(500).json({ message: 'Server error', details: error.message });
+  }
+};
+
+export const exportAttendance = async (req: AuthRequest, res: Response) => {
+  try {
+    const scopeWhere = req.user ? await buildEmployeeWhereClause(req.user) : {};
+    if (scopeWhere.id === -1) return res.status(403).json({ message: 'No access' });
+
+    const { startDate, endDate } = req.query;
+    const whereClause: any = Object.keys(scopeWhere).length > 0 ? { employee: scopeWhere } : {};
+    
+    if (startDate && endDate) {
+      whereClause.date = { gte: startDate as string, lte: endDate as string };
+    }
+
+    const records = await prisma.attendance.findMany({
+      where: whereClause,
+      include: { employee: true, shift: true },
+      orderBy: { date: 'desc' }
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Attendance');
+
+    worksheet.columns = [
+      { header: 'Employee Code', key: 'empCode', width: 15 },
+      { header: 'Name', key: 'name', width: 30 },
+      { header: 'Date', key: 'date', width: 15 },
+      { header: 'Clock In', key: 'clockIn', width: 15 },
+      { header: 'Clock Out', key: 'clockOut', width: 15 },
+      { header: 'Status', key: 'status', width: 15 },
+      { header: 'Shift', key: 'shift', width: 20 },
+    ];
+
+    records.forEach((r: any) => {
+      worksheet.addRow({
+        empCode: r.employee.empCode,
+        name: r.employee.name,
+        date: r.date,
+        clockIn: r.clockIn || '-',
+        clockOut: r.clockOut || '-',
+        status: r.status,
+        shift: r.shift?.name || '-'
+      });
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="attendance_report.xlsx"');
+    
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
   }
 };

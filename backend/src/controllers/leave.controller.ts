@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { prisma } from '../prisma';
 import { buildEmployeeWhereClause } from '../utils/scopeFilter';
 import { AuthRequest } from '../middlewares/auth.middleware';
+import ExcelJS from 'exceljs';
 
 export const getLeaves = async (req: AuthRequest, res: Response) => {
   try {
@@ -103,6 +104,62 @@ export const approveLeave = async (req: AuthRequest, res: Response) => {
     res.json(updated);
   } catch (error: any) {
     res.status(500).json({ message: 'Server error', details: error.message });
+  }
+};
+
+export const exportLeaves = async (req: AuthRequest, res: Response) => {
+  try {
+    const scopeWhere = req.user ? await buildEmployeeWhereClause(req.user) : {};
+    if (scopeWhere.id === -1) return res.status(403).json({ message: 'No access' });
+
+    const { startDate, endDate } = req.query;
+    const finalWhere: any = Object.keys(scopeWhere).length > 0 ? { employee: scopeWhere } : {};
+    
+    if (startDate && endDate) {
+      finalWhere.startDate = { gte: startDate as string };
+      finalWhere.endDate = { lte: endDate as string };
+    }
+
+    const leaves = await prisma.leave.findMany({
+      where: finalWhere,
+      include: { employee: true },
+      orderBy: { startDate: 'desc' }
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Leaves');
+
+    worksheet.columns = [
+      { header: 'Employee Code', key: 'empCode', width: 15 },
+      { header: 'Name', key: 'name', width: 30 },
+      { header: 'Type', key: 'type', width: 15 },
+      { header: 'Start Date', key: 'startDate', width: 15 },
+      { header: 'End Date', key: 'endDate', width: 15 },
+      { header: 'Days', key: 'days', width: 10 },
+      { header: 'Status', key: 'status', width: 15 },
+      { header: 'Approver', key: 'approver', width: 25 },
+    ];
+
+    leaves.forEach((l: any) => {
+      worksheet.addRow({
+        empCode: l.employee.empCode,
+        name: l.employee.name,
+        type: l.type,
+        startDate: l.startDate,
+        endDate: l.endDate,
+        days: l.days,
+        status: l.status,
+        approver: l.approver || '-'
+      });
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="leaves_report.xlsx"');
+    
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
   }
 };
 

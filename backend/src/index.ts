@@ -22,6 +22,7 @@ import mfaRoutes from './routes/mfa.routes';
 import otRoutes from './routes/ot.routes';
 import authGroupRoutes from './routes/authGroup.routes';
 import payrollComponentRoutes from './routes/payrollComponent.routes';
+import dashboardRoutes from './routes/dashboard.routes';
 
 dotenv.config();
 
@@ -69,6 +70,7 @@ app.use('/api/mfa', mfaRoutes);
 app.use('/api/ot', otRoutes);
 app.use('/api/auth-groups', authGroupRoutes);
 app.use('/api/payroll-components', payrollComponentRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', message: 'HRIS API is running' });

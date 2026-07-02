@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { runPayroll, getPayroll, approvePayroll, exportPayroll, getPayrollDetailById } from '../controllers/payroll.controller';
+import { runPayroll, getPayroll, approvePayroll, exportPayroll, getPayrollDetailById, generatePayslipPdf } from '../controllers/payroll.controller';
 import { authenticate, requirePermission, requireRole } from '../middlewares/auth.middleware';
 
 const router = Router();
@@ -16,6 +16,7 @@ router.get('/', requirePermission('payroll:view'), getPayroll);
 // Get payroll detail by id
 import { requireOwnershipOrScope } from '../middlewares/auth.middleware';
 router.get('/details/:id', requirePermission('payroll:view'), requireOwnershipOrScope('payrollRunDetail', 'empId'), getPayrollDetailById);
+router.get('/details/:id/payslip-pdf', requirePermission('payroll:view'), requireOwnershipOrScope('payrollRunDetail', 'empId'), generatePayslipPdf);
 
 // Approve payroll
 router.put('/:id/approve', requirePermission('payroll:approve'), approvePayroll);

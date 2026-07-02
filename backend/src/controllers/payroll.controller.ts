@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { prisma } from '../prisma';
 import { buildPayrollWhereClause } from '../utils/scopeFilter';
 import { AuthRequest } from '../middlewares/auth.middleware';
+import PDFDocument from 'pdfkit';
 
 import { runPayrollEngine } from '../utils/payrollEngine';
 
@@ -281,5 +282,63 @@ export const getPayrollDetailById = async (req: AuthRequest, res: Response) => {
     res.json(detail);
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+export const generatePayslipPdf = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const detail = await prisma.payrollRunDetail.findUnique({
+      where: { id: Number(id) },
+      include: { employee: true, payrollRun: true, componentResults: { include: { component: true } } }
+    });
+
+    if (!detail) {
+      return res.status(404).json({ message: 'Payroll detail not found' });
+    }
+
+    const doc = new PDFDocument({ margin: 50 });
+    const filename = `payslip_${detail.employee.empCode}_${detail.payrollRun.period}.pdf`;
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    
+    doc.pipe(res);
+    
+    doc.fontSize(20).text('COMPANY NAME', { align: 'center' });
+    doc.fontSize(14).text('Payslip', { align: 'center' });
+    doc.moveDown();
+    
+    doc.fontSize(12).text(`Name: ${detail.employee.name}`);
+    doc.text(`Employee ID: ${detail.employee.empCode}`);
+    doc.text(`Period: ${detail.payrollRun.period}`);
+    doc.moveDown();
+    
+    doc.fontSize(14).text('Earnings', { underline: true });
+    doc.fontSize(12).text(`Base Salary: ${detail.baseSalary.toFixed(2)} THB`);
+    if (detail.otPay > 0) doc.text(`Overtime Pay: ${detail.otPay.toFixed(2)} THB`);
+    
+    detail.componentResults.filter((c: any) => c.component?.type === 'earning').forEach((c: any) => {
+      doc.text(`${c.component?.name || 'Earning'}: ${c.amount.toFixed(2)} THB`);
+    });
+    doc.moveDown();
+
+    doc.fontSize(14).text('Deductions', { underline: true });
+    doc.fontSize(12).text(`Tax: ${detail.tax.toFixed(2)} THB`);
+    doc.text(`SSO: ${detail.sso.toFixed(2)} THB`);
+    if (detail.providentFund > 0) doc.text(`Provident Fund: ${detail.providentFund.toFixed(2)} THB`);
+    if (detail.loan > 0) doc.text(`Loan Deduction: ${detail.loan.toFixed(2)} THB`);
+    
+    detail.componentResults.filter((c: any) => c.component?.type === 'deduction').forEach((c: any) => {
+      doc.text(`${c.component?.name || 'Deduction'}: ${c.amount.toFixed(2)} THB`);
+    });
+    doc.moveDown();
+
+    doc.fontSize(16).text(`Net Pay: ${detail.net.toFixed(2)} THB`, { align: 'right' });
+    
+    doc.end();
+
+  } catch (error) {
+    res.status(500).json({ message: 'Error generating PDF' });
   }
 };

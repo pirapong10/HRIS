@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getAttendance, clockIn, clockOut, getTodayStatus, getCorrections, createCorrection, approveCorrection } from '../controllers/attendance.controller';
+import { getAttendance, clockIn, clockOut, getTodayStatus, getCorrections, createCorrection, approveCorrection, exportAttendance } from '../controllers/attendance.controller';
 import { authenticate, requirePermission } from '../middlewares/auth.middleware';
 
 const router = Router();
@@ -12,5 +12,7 @@ router.get('/today', authenticate, requirePermission('attendance:view'), getToda
 router.get('/corrections', authenticate, requirePermission('attendance:view'), getCorrections);
 router.post('/corrections', authenticate, requirePermission('attendance:create'), createCorrection);
 router.put('/corrections/:id/approve', authenticate, requirePermission('attendance:approve'), approveCorrection);
+
+router.get('/export/excel', authenticate, requirePermission('attendance:export'), exportAttendance);
 
 export default router;
