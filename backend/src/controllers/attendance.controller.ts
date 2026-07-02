@@ -4,6 +4,7 @@ import { buildEmployeeWhereClause } from '../utils/scopeFilter';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { GeoService } from '../utils/GeoService';
 import ExcelJS from 'exceljs';
+import { dispatchNotification } from '../utils/notification.service';
 
 export const getAttendance = async (req: AuthRequest, res: Response) => {
   try {
@@ -245,6 +246,11 @@ export const approveCorrection = async (req: AuthRequest, res: Response) => {
         ipAddress: req.ip || ''
       }
     });
+
+    const empUser = await prisma.user.findUnique({ where: { empId: updated.empId } });
+    if (empUser) {
+      await dispatchNotification(empUser.id, 'อัปเดตคำขอแก้เวลา', `คำขอแก้เวลาของคุณได้รับการ ${status === 'approved' ? 'อนุมัติ' : 'ปฏิเสธ'} แล้ว`, 'email', { email: true, emailTo: empUser.email || undefined });
+    }
 
     res.json(updated);
   } catch (error: any) {

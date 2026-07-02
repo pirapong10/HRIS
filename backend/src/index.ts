@@ -2,6 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import jwt from 'jsonwebtoken';
 
 dotenv.config();
 
@@ -43,6 +46,35 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
+const httpServer = createServer(app);
+export const io = new Server(httpServer, {
+  cors: {
+    origin: ALLOWED_ORIGINS,
+    credentials: true
+  }
+});
+
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token;
+  if (!token) {
+    return next(new Error('Authentication error'));
+  }
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret123') as any;
+    socket.data.userId = decoded.id;
+    next();
+  } catch (err) {
+    next(new Error('Authentication error'));
+  }
+});
+
+io.on('connection', (socket) => {
+  const userId = socket.data.userId;
+  socket.join(`user_${userId}`);
+  
+  socket.on('disconnect', () => {});
+});
+
 // Global API Rate Limiter
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -72,10 +104,13 @@ app.use('/api/auth-groups', authGroupRoutes);
 app.use('/api/payroll-components', payrollComponentRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 
+import notificationRoutes from './routes/notification.routes';
+app.use('/api/notifications', notificationRoutes);
+
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', message: 'HRIS API is running' });
 });
 
-app.listen(PORT, () => {
+httpServer.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);
 });

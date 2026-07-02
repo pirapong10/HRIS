@@ -3,6 +3,7 @@ import { prisma } from '../prisma';
 import { buildEmployeeWhereClause } from '../utils/scopeFilter';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import ExcelJS from 'exceljs';
+import { dispatchNotification } from '../utils/notification.service';
 
 export const getLeaves = async (req: AuthRequest, res: Response) => {
   try {
@@ -54,7 +55,10 @@ export const createLeave = async (req: AuthRequest, res: Response) => {
       data.empId = req.user.empId;
     }
     
-    const leave = await prisma.leave.create({ data });
+    const leave = await prisma.leave.create({ 
+      data,
+      include: { employee: true }
+    });
     
     // Also create approval request
     await prisma.approvalRequest.create({
@@ -65,6 +69,11 @@ export const createLeave = async (req: AuthRequest, res: Response) => {
         status: 'pending_manager'
       }
     });
+
+    const hrAdmins = await prisma.user.findMany({ where: { roles: { hasSome: ['HR_ADMIN', 'SUPER_ADMIN'] } } });
+    for (const hr of hrAdmins) {
+      await dispatchNotification(hr.id, 'คำขอลาหยุดใหม่', `พนักงาน ${leave.employee?.name || 'พนักงาน'} ได้ยื่นคำขอลาหยุด`, 'in_app');
+    }
 
     res.status(201).json(leave);
   } catch (error: any) {
@@ -100,6 +109,11 @@ export const approveLeave = async (req: AuthRequest, res: Response) => {
         ipAddress: req.ip || ''
       }
     });
+
+    const empUser = await prisma.user.findUnique({ where: { empId: updated.empId } });
+    if (empUser) {
+      await dispatchNotification(empUser.id, 'อัปเดตสถานะการลา', `คำขอลาหยุดของคุณได้รับการ ${status === 'approved' ? 'อนุมัติ' : 'ปฏิเสธ'} แล้ว`, 'email', { email: true, emailTo: empUser.email || undefined });
+    }
 
     res.json(updated);
   } catch (error: any) {
