@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { prisma } from '../prisma';
 import { buildEmployeeWhereClause } from '../utils/scopeFilter';
 import { AuthRequest } from '../middlewares/auth.middleware';
+import { GeoService } from '../utils/GeoService';
 
 export const getAttendance = async (req: AuthRequest, res: Response) => {
   try {
@@ -44,17 +45,6 @@ export const getAttendance = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// Haversine formula to calculate distance in meters
-const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-  const R = 6371e3; // meters
-  const p1 = lat1 * Math.PI/180;
-  const p2 = lat2 * Math.PI/180;
-  const dp = (lat2-lat1) * Math.PI/180;
-  const dl = (lon2-lon1) * Math.PI/180;
-  const a = Math.sin(dp/2) * Math.sin(dp/2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2) * Math.sin(dl/2);
-  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
-};
-
 export const clockIn = async (req: any, res: Response) => {
   try {
     const { lat, lng } = req.body;
@@ -63,21 +53,15 @@ export const clockIn = async (req: any, res: Response) => {
     if (!empId) return res.status(400).json({ message: 'User is not linked to an employee' });
     if (!lat || !lng) return res.status(400).json({ message: 'Location data (lat, lng) is required' });
 
-    // Fetch dynamic system geofencing configuration
-    const config = await prisma.systemConfig.findFirst();
-
-    if (config) {
-      const OFFICE_LAT = config.companyLat || 13.7563;
-      const OFFICE_LNG = config.companyLng || 100.5018;
-      const ALLOWED_RADIUS = config.allowedRadiusM || 500;
-
-      const dist = getDistance(OFFICE_LAT, OFFICE_LNG, lat, lng);
-      
-      if (dist > ALLOWED_RADIUS) {
-        return res.status(400).json({ 
-          message: `คุณอยู่นอกพื้นที่ที่อนุญาต (ห่าง ${Math.round(dist)} เมตร จากจุดที่กำหนด)` 
+    try {
+      const geoCheck = GeoService.validateLocation(lat, lng);
+      if (!geoCheck.isValid) {
+        return res.status(403).json({ 
+          message: `คุณอยู่นอกพื้นที่ที่อนุญาต (ห่าง ${Math.round(geoCheck.distance)} เมตร จากจุดที่กำหนด)` 
         });
       }
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
     }
 
     const today = new Date().toISOString().split('T')[0];
@@ -116,21 +100,15 @@ export const clockOut = async (req: any, res: Response) => {
     if (!empId) return res.status(400).json({ message: 'User is not linked to an employee' });
     if (!lat || !lng) return res.status(400).json({ message: 'Location data (lat, lng) is required' });
 
-    // Fetch dynamic system geofencing configuration
-    const config = await prisma.systemConfig.findFirst();
-
-    if (config) {
-      const OFFICE_LAT = config.companyLat || 13.7563;
-      const OFFICE_LNG = config.companyLng || 100.5018;
-      const ALLOWED_RADIUS = config.allowedRadiusM || 500;
-
-      const dist = getDistance(OFFICE_LAT, OFFICE_LNG, lat, lng);
-      
-      if (dist > ALLOWED_RADIUS) {
-        return res.status(400).json({ 
-          message: `คุณอยู่นอกพื้นที่ที่อนุญาต (ห่าง ${Math.round(dist)} เมตร จากจุดที่กำหนด)` 
+    try {
+      const geoCheck = GeoService.validateLocation(lat, lng);
+      if (!geoCheck.isValid) {
+        return res.status(403).json({ 
+          message: `คุณอยู่นอกพื้นที่ที่อนุญาต (ห่าง ${Math.round(geoCheck.distance)} เมตร จากจุดที่กำหนด)` 
         });
       }
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
     }
 
     const today = new Date().toISOString().split('T')[0];
@@ -155,5 +133,120 @@ export const clockOut = async (req: any, res: Response) => {
     res.json(updated);
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+export const getTodayStatus = async (req: AuthRequest, res: Response) => {
+  try {
+    const empId = req.user?.empId;
+    if (!empId) return res.json({ clockedIn: false, clockIn: null, clockOut: null });
+    
+    const today = new Date().toISOString().split('T')[0];
+    const record = await prisma.attendance.findFirst({
+      where: { empId, date: today }
+    });
+    
+    if (record) {
+      const createTime = (timeStr: string) => {
+        const d = new Date();
+        const dateStr = d.toISOString().split('T')[0];
+        return `${dateStr}T${timeStr.padStart(8, '0')}Z`;
+      };
+      
+      res.json({ 
+        clockedIn: !record.clockOut, 
+        clockIn: record.clockIn ? createTime(record.clockIn) : null,
+        clockOut: record.clockOut ? createTime(record.clockOut) : null
+      });
+    } else {
+      res.json({ clockedIn: false, clockIn: null, clockOut: null });
+    }
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+export const getCorrections = async (req: AuthRequest, res: Response) => {
+  try {
+    const scopeWhere = req.user ? await buildEmployeeWhereClause(req.user) : {};
+    if (scopeWhere.id === -1) return res.json({ data: [], total: 0, page: 1, limit: 50 });
+    
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const skip = (page - 1) * limit;
+
+    const finalWhere = Object.keys(scopeWhere).length > 0 ? { employee: scopeWhere } : {};
+    
+    const [corrections, total] = await Promise.all([
+      prisma.attendanceCorrection.findMany({
+        where: finalWhere,
+        include: { employee: true },
+        skip,
+        take: limit,
+        orderBy: { date: 'desc' }
+      }),
+      prisma.attendanceCorrection.count({ where: finalWhere })
+    ]);
+    
+    res.json({ data: corrections, total, page, limit });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+export const createCorrection = async (req: AuthRequest, res: Response) => {
+  try {
+    const data = { ...req.body };
+    if (req.user?.empId) {
+      data.empId = req.user.empId;
+    } else {
+      return res.status(403).json({ message: 'User is not linked to an employee' });
+    }
+    data.status = 'pending_manager';
+    
+    const correction = await prisma.attendanceCorrection.create({ data });
+    
+    await prisma.approvalRequest.create({
+      data: {
+        type: 'CORRECTION',
+        referenceId: correction.id,
+        requesterId: correction.empId,
+        status: 'pending_manager'
+      }
+    });
+
+    res.status(201).json(correction);
+  } catch (error: any) {
+    res.status(500).json({ message: 'Server error', details: error.message });
+  }
+};
+
+export const approveCorrection = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const updated = await prisma.attendanceCorrection.update({
+      where: { id: parseInt(id as string) },
+      data: {
+        status,
+        approver: req.user?.email || 'System'
+      }
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user?.id,
+        action: 'UPDATE',
+        module: 'attendance',
+        details: `Correction ${id} status updated to ${status}`,
+        recordId: id,
+        ipAddress: req.ip || ''
+      }
+    });
+
+    res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ message: 'Server error', details: error.message });
   }
 };

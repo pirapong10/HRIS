@@ -71,3 +71,38 @@ export const createLeave = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: 'Server error', details: error.message });
   }
 };
+
+export const approveLeave = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { status, comment } = req.body; // status: 'approved' | 'rejected'
+
+    const leave = await prisma.leave.findUnique({ where: { id: parseInt(id as string) } });
+    if (!leave) return res.status(404).json({ message: 'Leave not found' });
+
+    const updated = await prisma.leave.update({
+      where: { id: leave.id },
+      data: {
+        status,
+        approver: req.user?.email || 'System'
+      },
+      include: { employee: true }
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user?.id,
+        action: 'UPDATE',
+        module: 'attendance',
+        details: `Leave ${id} status updated to ${status}`,
+        recordId: id,
+        ipAddress: req.ip || ''
+      }
+    });
+
+    res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ message: 'Server error', details: error.message });
+  }
+};
+
