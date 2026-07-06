@@ -11,12 +11,24 @@ export const getShifts = async (req: AuthRequest, res: Response) => {
       },
       orderBy: { name: 'asc' }
     });
-    // Parse days JSON string for each shift
-    const result = shifts.map(s => ({
-      ...s,
-      days: typeof s.days === 'string' ? JSON.parse(s.days) : s.days,
-      employeeCount: s._count.employees
-    }));
+    // Parse days JSON string for each shift, fallback to split for legacy CSV
+    const result = shifts.map(s => {
+      let parsedDays = [];
+      if (typeof s.days === 'string') {
+        try {
+          parsedDays = JSON.parse(s.days);
+        } catch(e) {
+          parsedDays = s.days.split(',');
+        }
+      } else {
+        parsedDays = s.days;
+      }
+      return {
+        ...s,
+        days: parsedDays,
+        employeeCount: s._count.employees
+      };
+    });
     res.json(result);
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
