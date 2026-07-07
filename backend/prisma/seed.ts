@@ -125,7 +125,7 @@ async function main() {
     { code: 'HR_DIRECTOR', name: 'HR Director', level: 80,
       perms: Object.keys(permIds).filter(p => p.startsWith('employee:') || p.startsWith('attendance:') || p.startsWith('leave:') || p.startsWith('organization:') || ['reports:view', 'reports:export', 'dashboard:view'].includes(p)) },
     { code: 'HR_MANAGER', name: 'HR Manager', level: 60,
-      perms: ['employee:view', 'employee:edit', 'attendance:view', 'attendance:edit', 'leave:view', 'leave:approve', 'dashboard:view'] },
+      perms: ['employee:view', 'employee:edit', 'attendance:view', 'attendance:edit', 'leave:view', 'leave:approve', 'dashboard:view', 'shift:view', 'shift:edit', 'shift:approve', 'ot:view', 'ot:approve'] },
     { code: 'PAYROLL_MANAGER', name: 'Payroll Manager', level: 65,
       perms: [...Object.keys(permIds).filter(p => p.startsWith('payroll:') || p.startsWith('reports:')), 'employee:view'] },
     { code: 'PAYROLL_OFFICER', name: 'Payroll Officer', level: 55,
@@ -182,6 +182,35 @@ async function main() {
       where: { userId_roleId: { userId: user.id, roleId: role.id } },
       update: {},
       create: { userId: user.id, roleId: role.id }
+    });
+  }
+
+  // 6.5. Create immutable Bootstrap Superadmin
+  const adminHash = await bcrypt.hash('Admin@123!', 10);
+  const bootstrapAdminEmail = 'admin@company.com';
+  
+  let bootstrapEmp = await prisma.employee.findFirst({ where: { email: bootstrapAdminEmail } });
+  if (!bootstrapEmp) {
+    bootstrapEmp = await prisma.employee.create({
+      data: {
+        empCode: `EMP-ADMIN`, name: `Bootstrap Admin`, deptId: dept1.id, posId: pos1.id, type: 'fulltime', hireDate: '2023-01-01', dob: '1990-01-01', gender: 'male', salary: 100000, email: bootstrapAdminEmail, shiftId: shift1.id
+      }
+    });
+  }
+  
+  const superAdminRole = await prisma.role.findUnique({ where: { code: 'SUPER_ADMIN' } });
+
+  const bootstrapUser = await prisma.user.upsert({
+    where: { email: bootstrapAdminEmail },
+    update: { password: adminHash, empId: bootstrapEmp.id, isActive: true },
+    create: { email: bootstrapAdminEmail, password: adminHash, empId: bootstrapEmp.id, isActive: true }
+  });
+
+  if (superAdminRole) {
+    await prisma.userRole.upsert({
+      where: { userId_roleId: { userId: bootstrapUser.id, roleId: superAdminRole.id } },
+      update: {},
+      create: { userId: bootstrapUser.id, roleId: superAdminRole.id }
     });
   }
 
