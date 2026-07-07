@@ -26,6 +26,7 @@ import otRoutes from './routes/ot.routes';
 import authGroupRoutes from './routes/authGroup.routes';
 import payrollComponentRoutes from './routes/payrollComponent.routes';
 import dashboardRoutes from './routes/dashboard.routes';
+import headcountRoutes from './routes/headcount.routes';
 
 dotenv.config();
 
@@ -103,6 +104,7 @@ app.use('/api/ot', otRoutes);
 app.use('/api/auth-groups', authGroupRoutes);
 app.use('/api/payroll-components', payrollComponentRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/headcount', headcountRoutes);
 
 import notificationRoutes from './routes/notification.routes';
 app.use('/api/notifications', notificationRoutes);

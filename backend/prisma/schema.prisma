@@ -22,13 +22,15 @@ model User {
   mfaEnabled Boolean @default(false)
   mfaSecret  String?
 
-  auditLogs        AuditLog[]
-  notifications    Notification[]
-  approvalLogs     ApprovalLog[]
-  userRoles        UserRole[]
-  dataScope        DataScope?
-  payrollScope     PayrollScope?
-  authGroupMembers AuthGroupMember[]
+  auditLogs           AuditLog[]
+  notifications        Notification[]
+  approvalLogs         ApprovalLog[]
+  userRoles            UserRole[]
+  dataScope            DataScope?
+  payrollScope         PayrollScope?
+  authGroupMembers     AuthGroupMember[]
+  headcountRequests    HeadcountRequest[] @relation("HCRequested")
+  headcountApprovals   HeadcountRequest[] @relation("HCApproved")
 }
 
 // ─── RBAC Models ──────────────────────────────────────────────────────
@@ -422,15 +424,24 @@ model OnboardingTask {
 }
 
 model HeadcountRequest {
-  id         Int        @id @default(autoincrement())
-  deptId     Int
-  department Department @relation(fields: [deptId], references: [id])
-  posId      Int
-  position   Position   @relation(fields: [posId], references: [id])
-  quantity   Int
-  reason     String
-  date       String
-  status     String     @default("pending_manager")
+  id            Int       @id @default(autoincrement())
+  deptId        Int
+  department    Department @relation(fields: [deptId], references: [id])
+  posId         Int
+  position      Position   @relation(fields: [posId], references: [id])
+  quantity      Int
+  reason        String
+  date          String
+  status        String    @default("pending_manager")
+  priority      String    @default("normal")  // low|normal|high|urgent
+  approverNote  String?
+  requestedById Int
+  approvedById  Int?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  requestedBy   User      @relation("HCRequested", fields: [requestedById], references: [id])
+  approvedBy    User?     @relation("HCApproved", fields: [approvedById], references: [id])
 }
 
 model AuditLog {
@@ -558,4 +569,33 @@ model EmployeeLoan {
   startDate     DateTime
   status        String   @default("active") // active | completed | cancelled
   employee      Employee @relation(fields: [empId], references: [id])
+}
+
+model EnterpriseAuditLog {
+  id              String   @id @default(uuid())
+  timestamp       DateTime @default(now())
+  
+  // Actor Information (Who)
+  actorId         Int
+  actorRoles      Json     // Snapshot of roles at the time
+  actorIp         String
+  
+  // Action Context (What)
+  module          String   // e.g., "payroll", "attendance"
+  action          String   // e.g., "APPROVE_LEAVE", "ADJUST_SALARY"
+  recordId        String   // Target entity ID
+  
+  // State Transformation (Delta)
+  previousState   Json?    // Null for creations
+  newState        Json?    // Null for deletions
+  
+  // AI & RAG Context
+  aiAssisted      Boolean  @default(false)
+  aiRecommendationId String? // Link to AI inference logs
+  businessReason  String?  // Mandatory justification for high-risk actions
+  
+  // Security
+  cryptographicHash String // SHA-256 hash of previous log + current data for immutability
+
+  @@index([timestamp])
 }
