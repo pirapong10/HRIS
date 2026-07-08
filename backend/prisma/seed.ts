@@ -7,6 +7,7 @@ async function main() {
   console.log('Seeding initial data...');
 
   // Clean up existing data to prevent duplicates on re-seed
+  await prisma.headcountRequest.deleteMany({});
   await prisma.user.deleteMany({});
   await prisma.attendanceCorrection.deleteMany({});
   await prisma.attendance.deleteMany({});
@@ -19,7 +20,6 @@ async function main() {
   await prisma.empHistory.deleteMany({});
   await prisma.onboardingTask.deleteMany({});
   await prisma.employee.deleteMany({});
-  await prisma.headcountRequest.deleteMany({});
   await prisma.position.deleteMany({});
   await prisma.department.deleteMany({});
   await prisma.shift.deleteMany({});
@@ -223,6 +223,7 @@ async function main() {
   // Seed default payroll components (idempotent via upsert)
   await upsertPayrollComponents();
   console.log('✅ Default payroll components seeded.');
+  await upsertEmployeeTypes();
 }
 
 async function upsertPayrollComponents() {
@@ -317,6 +318,44 @@ async function upsertPayrollComponents() {
     });
     console.log(`  → Upserted component: ${comp.code} (${comp.name})`);
   }
+}
+
+async function upsertEmployeeTypes() {
+  const types = [
+    {
+      code: 'fulltime', name: 'พนักงานประจำ', color: '#3B82F6', sortOrder: 1,
+      ssoEnabled: true, ssoRate: 0.05, ssoCap: 750, ssoEmployerRate: 0.05,
+      taxMethod: 'progressive', taxFlatRate: null,
+      otEligible: true, leaveEligible: true, annualLeave: 6, includeInPayroll: true
+    },
+    {
+      code: 'parttime', name: 'พาร์ทไทม์', color: '#8B5CF6', sortOrder: 2,
+      ssoEnabled: true, ssoRate: 0.05, ssoCap: 750, ssoEmployerRate: 0.05,
+      taxMethod: 'progressive', taxFlatRate: null,
+      otEligible: true, leaveEligible: false, annualLeave: 0, includeInPayroll: true
+    },
+    {
+      code: 'contract', name: 'สัญญาจ้าง (Contractor)', color: '#F59E0B', sortOrder: 3,
+      ssoEnabled: false, ssoRate: 0, ssoCap: 0, ssoEmployerRate: 0,
+      taxMethod: 'wht', taxFlatRate: 0.03,
+      otEligible: false, leaveEligible: false, annualLeave: 0, includeInPayroll: true
+    },
+    {
+      code: 'intern', name: 'นักศึกษาฝึกงาน', color: '#10B981', sortOrder: 4,
+      ssoEnabled: false, ssoRate: 0, ssoCap: 0, ssoEmployerRate: 0,
+      taxMethod: 'exempt', taxFlatRate: null,
+      otEligible: false, leaveEligible: false, annualLeave: 0, includeInPayroll: false
+    },
+  ];
+
+  for (const t of types) {
+    await prisma.employeeType.upsert({
+      where: { code: t.code },
+      update: t,
+      create: t,
+    });
+  }
+  console.log('✅ EmployeeType seeded');
 }
 
 main()

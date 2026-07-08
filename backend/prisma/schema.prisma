@@ -112,6 +112,8 @@ model Employee {
   name       String
   dob        String?
   gender     String?
+  employeeTypeId Int?
+  employeeType   EmployeeType? @relation(fields: [employeeTypeId], references: [id])
   type       String  @default("fulltime")
   phone      String?
   email      String?
@@ -284,6 +286,7 @@ model Leave {
   endDate   String
   days      Float
   reason    String?
+  medicalCertPath String?
   status    String   @default("pending_manager")
   approver  String?
 }
@@ -380,6 +383,7 @@ model PayrollComponent {
   updatedAt    DateTime @updatedAt
 
   results PayrollComponentResult[]
+  employeeTypeMappings EmployeeTypePayrollMapping[]
 }
 
 model PayrollComponentResult {
@@ -598,4 +602,49 @@ model EnterpriseAuditLog {
   cryptographicHash String // SHA-256 hash of previous log + current data for immutability
 
   @@index([timestamp])
+}
+
+model EmployeeTypePayrollMapping {
+  id                 Int              @id @default(autoincrement())
+  employeeType       String
+  payrollComponentId Int
+  payrollComponent   PayrollComponent @relation(fields: [payrollComponentId], references: [id], onDelete: Cascade)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@unique([employeeType, payrollComponentId])
+}
+
+model EmployeeType {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique  // "fulltime", "parttime", "contract", "intern"
+  name        String            // "พนักงานประจำ", "พาร์ทไทม์"
+  color       String   @default("#3B82F6")
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+
+  // SSO Rules
+  ssoEnabled      Boolean @default(true)
+  ssoRate         Float   @default(0.05)
+  ssoCap          Float   @default(750)
+  ssoEmployerRate Float   @default(0.05)
+
+  // Tax Rules
+  taxMethod    String  @default("progressive")
+  // "progressive" = Thai RD bracket (uses calculateThaiTax function)
+  // "flat"        = flat rate %
+  // "wht"         = withholding tax %
+  // "exempt"      = no tax
+  taxFlatRate  Float?
+
+  // Work Rules
+  otEligible       Boolean @default(true)
+  leaveEligible    Boolean @default(true)
+  annualLeave      Int     @default(6)
+  includeInPayroll Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employees Employee[]
 }
