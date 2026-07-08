@@ -4,6 +4,7 @@ import { PAYROLL_FUNCTIONS } from './payrollFunctions';
 
 export interface ComponentResult {
   code: string;
+  componentId: number;
   amount: number;
   formulaUsed: string;
 }
@@ -29,8 +30,33 @@ export interface EngineOutput {
  * taxable earning components computed so far.
  */
 export async function runPayrollEngine(
-  baseVariables: Record<string, number>
+  baseVariables: Record<string, number>,
+  employeeTypeId?: number
 ): Promise<EngineOutput> {
+  // Load EmployeeType rules if provided
+  let empType = null;
+  if (employeeTypeId) {
+    empType = await prisma.employeeType.findUnique({
+      where: { id: employeeTypeId }
+    });
+  }
+
+  // Inject variables BEFORE the component loop starts
+  if (empType) {
+    baseVariables.SSO_RATE = empType.ssoEnabled ? empType.ssoRate : 0;
+    baseVariables.SSO_CAP = empType.ssoEnabled ? empType.ssoCap : 0;
+    baseVariables.SSO_EMPLOYER_RATE = empType.ssoEnabled ? empType.ssoEmployerRate : 0;
+    baseVariables.INCLUDE_IN_PAYROLL = empType.includeInPayroll ? 1 : 0;
+    
+    baseVariables.TAX_METHOD = empType.taxMethod === 'progressive' ? 1 : 0;
+    baseVariables.TAX_FLAT_RATE = empType.taxFlatRate || 0;
+  }
+
+  // Fallback defaults if employeeTypeId is null to preserve legacy data
+  if (baseVariables.SSO_RATE === undefined) baseVariables.SSO_RATE = 0.05;
+  if (baseVariables.SSO_CAP === undefined) baseVariables.SSO_CAP = 750;
+  if (baseVariables.TAX_METHOD === undefined) baseVariables.TAX_METHOD = 1;
+
   const components = await prisma.payrollComponent.findMany({
     where: { isActive: true },
     orderBy: { sortOrder: 'asc' },
@@ -83,6 +109,7 @@ export async function runPayrollEngine(
     computed[comp.code] = amount;
     results.push({
       code: comp.code,
+      componentId: comp.id,
       amount,
       formulaUsed: comp.formula || comp.functionName || '',
     });

@@ -32,6 +32,15 @@ const TAX_BRACKETS = [
  *   6. Divide annual tax by 12 → return monthly WHT (rounded)
  */
 function calculateThaiTax(vars: Record<string, number>): number {
+  // If taxMethod is not progressive, use flat rate or return 0
+  if (vars.TAX_METHOD === 0) {
+    if ((vars.TAX_FLAT_RATE || 0) > 0) {
+      // WHT or flat: apply flat rate to gross income
+      return Math.round((vars.TaxableIncome || 0) * (vars.TAX_FLAT_RATE || 0));
+    }
+    return 0; // exempt
+  }
+
   const monthly = vars.TaxableIncome || 0;
   const annualGross = monthly * 12;
   const deductExpense = Math.min(annualGross * 0.5, 100000);

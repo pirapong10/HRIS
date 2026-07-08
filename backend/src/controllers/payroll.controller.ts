@@ -94,7 +94,7 @@ export const runPayroll = async (req: AuthRequest, res: Response) => {
           LoanDeduction: loanDeduct,
         };
 
-        const result = await runPayrollEngine(baseVariables);
+        const result = await runPayrollEngine(baseVariables, emp.employeeTypeId || undefined);
 
         const detail = await tx.payrollRunDetail.create({
           data: {
