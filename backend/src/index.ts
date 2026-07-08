@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
+import path from 'path';
 
 dotenv.config();
 
@@ -27,6 +28,8 @@ import authGroupRoutes from './routes/authGroup.routes';
 import payrollComponentRoutes from './routes/payrollComponent.routes';
 import dashboardRoutes from './routes/dashboard.routes';
 import headcountRoutes from './routes/headcount.routes';
+import payrollConfigRoutes from './routes/payrollConfig.routes';
+import employeeTypeRoutes from './routes/employeeType.routes';
 
 dotenv.config();
 
@@ -103,8 +106,13 @@ app.use('/api/mfa', mfaRoutes);
 app.use('/api/ot', otRoutes);
 app.use('/api/auth-groups', authGroupRoutes);
 app.use('/api/payroll-components', payrollComponentRoutes);
+app.use('/api/employee-types', employeeTypeRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/headcount', headcountRoutes);
+app.use('/api/payroll-config', payrollConfigRoutes);
+
+// Static files
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 import notificationRoutes from './routes/notification.routes';
 app.use('/api/notifications', notificationRoutes);
