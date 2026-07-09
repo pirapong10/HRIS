@@ -54,7 +54,7 @@ export const getDepartments = async (req: Request, res: Response) => {
 
 export const createDepartment = async (req: Request, res: Response) => {
   try {
-    const { name, code, headId, parentId, costCenterId, description, type } = req.body;
+    const { name, code, headId, parentId, costCenterId, description, type, countryCode, currency, timezone, exchangeRate } = req.body;
     
     if (!name || !code) return res.status(400).json({ message: 'ชื่อแผนกและรหัสแผนกเป็นข้อมูลบังคับ' });
 
@@ -76,7 +76,11 @@ export const createDepartment = async (req: Request, res: Response) => {
         description,
         parentId: parentId ? Number(parentId) : null,
         headId: headId ? Number(headId) : null,
-        costCenterId: costCenterId ? Number(costCenterId) : null
+        costCenterId: costCenterId ? Number(costCenterId) : null,
+        countryCode: countryCode || null,
+        currency: currency || null,
+        timezone: timezone || null,
+        exchangeRate: exchangeRate ? parseFloat(exchangeRate) : 1.0
       }
     });
     
@@ -89,9 +93,13 @@ export const createDepartment = async (req: Request, res: Response) => {
 export const updateDepartment = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, code, headId, parentId, costCenterId, description, status, type } = req.body;
+    const { name, code, headId, parentId, costCenterId, description, status, type, countryCode, currency, timezone, exchangeRate } = req.body;
 
     if (!name || !code) return res.status(400).json({ message: 'ชื่อแผนกและรหัสแผนกเป็นข้อมูลบังคับ' });
+
+    // Check code uniqueness excluding current department
+    const existing = await prisma.department.findFirst({ where: { code, id: { not: Number(id) } } });
+    if (existing) return res.status(400).json({ message: `รหัสแผนก '${code}' นี้มีอยู่ในระบบแล้ว (แผนก: ${existing.name})` });
 
     if (headId) {
       const existingHead = await prisma.department.findFirst({ 
@@ -106,7 +114,7 @@ export const updateDepartment = async (req: Request, res: Response) => {
       }
 
       let currentParentId = Number(parentId);
-      let depth = 0; // prevent infinite loop in case DB is already corrupted
+      let depth = 0;
       while (currentParentId && depth < 50) {
         if (currentParentId === Number(id)) {
           return res.status(400).json({ message: 'ไม่สามารถกำหนดแผนกแม่ที่สร้างความสัมพันธ์แบบวงกลมได้ (Circular Reference)' });
@@ -120,13 +128,21 @@ export const updateDepartment = async (req: Request, res: Response) => {
     const updateData: any = {
       name,
       code,
-      description,
-      status,
-      parentId: parentId ? Number(parentId) : null,
-      headId: headId ? Number(headId) : null,
-      costCenterId: costCenterId ? Number(costCenterId) : null
+      description: description ?? null,
+      status: status ?? 'active',
+      // Use undefined instead of null for optional relations so they aren't accidentally cleared
+      parentId: parentId !== undefined ? (parentId ? Number(parentId) : null) : undefined,
+      headId: headId !== undefined ? (headId ? Number(headId) : null) : undefined,
+      costCenterId: costCenterId !== undefined ? (costCenterId ? Number(costCenterId) : null) : undefined,
     };
+    // Remove undefined keys so Prisma doesn't override with undefined
+    Object.keys(updateData).forEach(k => updateData[k] === undefined && delete updateData[k]);
+
     if (type) updateData.type = type;
+    if (countryCode !== undefined) updateData.countryCode = countryCode || null;
+    if (currency !== undefined) updateData.currency = currency || null;
+    if (timezone !== undefined) updateData.timezone = timezone || null;
+    if (exchangeRate !== undefined) updateData.exchangeRate = parseFloat(exchangeRate) || 1.0;
 
     const department = await prisma.department.update({
       where: { id: Number(id) },
@@ -134,30 +150,39 @@ export const updateDepartment = async (req: Request, res: Response) => {
     });
 
     res.json(department);
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+  } catch (error: any) {
+    console.error('updateDepartment error:', error?.message || error);
+    res.status(500).json({ message: 'Server error', detail: error?.message });
   }
 };
 
 export const deleteDepartment = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const deptId = Number(id);
     
+    // Check if it has active employees (Block deletion completely)
     const activeEmployeesCount = await prisma.employee.count({
-      where: { deptId: Number(id), user: { isActive: true } }
+      where: { deptId, user: { isActive: true } }
     });
 
     if (activeEmployeesCount > 0) {
       return res.status(400).json({ message: 'ไม่สามารถลบแผนกที่มีพนักงานประจำอยู่ได้' });
     }
 
-    // Soft delete
-    const department = await prisma.department.update({
-      where: { id: Number(id) },
-      data: { status: 'inactive' }
-    });
+    // Check for ANY other relationships (inactive employees, positions, headcount requests, sub-departments)
+    const totalEmployees = await prisma.employee.count({ where: { deptId } });
+    const totalPositions = await prisma.position.count({ where: { deptId } });
+    const totalHeadcounts = await prisma.headcountRequest.count({ where: { deptId } });
+    const totalChildren = await prisma.department.count({ where: { parentId: deptId } });
 
-    res.json({ message: 'ลบแผนกเรียบร้อยแล้ว (Soft Delete)', department });
+    if (totalEmployees === 0 && totalPositions === 0 && totalHeadcounts === 0 && totalChildren === 0) {
+      // Safe to Hard Delete (completely remove and free up the code)
+      await prisma.department.delete({ where: { id: deptId } });
+      return res.json({ message: 'ลบแผนกออกจากระบบเรียบร้อยแล้ว (Hard Delete)' });
+    }
+
+    return res.status(400).json({ message: 'ไม่สามารถลบแผนกนี้ได้ เนื่องจากมีข้อมูลผูกพันในระบบ (พนักงาน, ตำแหน่ง, หรือแผนกย่อย) กรุณาใช้การเปลี่ยนสถานะเป็น Inactive แทน' });
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }

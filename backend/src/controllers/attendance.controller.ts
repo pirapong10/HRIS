@@ -69,6 +69,27 @@ export const clockIn = async (req: any, res: Response) => {
     const today = new Date().toISOString().split('T')[0];
     const time = new Date().toLocaleTimeString("th-TH");
 
+    const emp = await prisma.employee.findUnique({
+      where: { id: empId },
+      include: { shift: true }
+    });
+    if (!emp) return res.status(404).json({ message: 'Employee not found' });
+
+    let lateMinutes = 0;
+    if (emp.shift?.startTime) {
+      const [sh, sm] = emp.shift.startTime.split(':').map(Number);
+      const [ch, cm] = time.split(':').map(Number);
+      const shiftMins = sh * 60 + sm;
+      const clockMins = ch * 60 + cm;
+      
+      const config = await prisma.systemConfig.findFirst();
+      const grace = config?.lateThresholdMins || 15;
+
+      if (clockMins > shiftMins + grace) {
+        lateMinutes = clockMins - shiftMins;
+      }
+    }
+
     // Check if already clocked in today
     const existing = await prisma.attendance.findFirst({
       where: { empId, date: today }
@@ -84,7 +105,8 @@ export const clockIn = async (req: any, res: Response) => {
         date: today,
         clockIn: time,
         status: "present",
-        locationIn: `${lat},${lng}`
+        locationIn: `${lat},${lng}`,
+        lateMinutes
       }
     });
 
@@ -242,7 +264,7 @@ export const approveCorrection = async (req: AuthRequest, res: Response) => {
         action: 'UPDATE',
         module: 'attendance',
         details: `Correction ${id} status updated to ${status}`,
-        recordId: id,
+        recordId: String(id),
         ipAddress: req.ip || ''
       }
     });

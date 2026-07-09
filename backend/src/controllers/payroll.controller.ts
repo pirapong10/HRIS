@@ -22,6 +22,22 @@ function getLastBusinessDay(period: string): string {
   return localDate.toISOString().split('T')[0];
 }
 
+async function getEmployeeCurrency(empId: number, tx: any) {
+  const emp = await tx.employee.findUnique({
+    where: { id: empId },
+    include: { department: true }
+  });
+  let dept = emp?.department;
+  while (dept) {
+    if (dept.currency) {
+      return { currency: dept.currency, exchangeRate: dept.exchangeRate || 1.0 };
+    }
+    if (!dept.parentId) break;
+    dept = await tx.department.findUnique({ where: { id: dept.parentId } });
+  }
+  return { currency: 'THB', exchangeRate: 1.0 };
+}
+
 export const runPayroll = async (req: AuthRequest, res: Response) => {
   try {
     const { period } = req.body;
@@ -87,14 +103,21 @@ export const runPayroll = async (req: AuthRequest, res: Response) => {
         });
         const loanDeduct = activeLoan ? Math.min(activeLoan.monthlyDeduct, activeLoan.remainingBal) : 0;
 
+        // Sum late minutes from attendance
+        const attendances = await tx.attendance.findMany({
+          where: { empId: emp.id, date: { startsWith: period } }
+        });
+        const totalLateMins = attendances.reduce((sum: number, a: any) => sum + (a.lateMinutes || 0), 0);
+
         const baseVariables = {
           Salary: emp.salary,
           OTHours: otHours,
-          LateMinutes: 0, // Not tracked yet. LATE_DED always = 0 until attendance clock-in vs shift.startTime is implemented.
+          LateMinutes: totalLateMins,
           LoanDeduction: loanDeduct,
         };
 
         const result = await runPayrollEngine(baseVariables, emp.employeeTypeId || undefined);
+        const curr = await getEmployeeCurrency(emp.id, tx);
 
         const detail = await tx.payrollRunDetail.create({
           data: {
@@ -111,6 +134,10 @@ export const runPayroll = async (req: AuthRequest, res: Response) => {
             loan: result.computed.LOAN_DED || 0,
             other_deduct: 0,
             net: result.net,
+            currency: curr.currency,
+            exchangeRate: curr.exchangeRate,
+            grossLocal: result.gross * curr.exchangeRate,
+            netLocal: result.net * curr.exchangeRate,
             status: "paid",
             paidDate: getLastBusinessDay(period),
             componentResults: {

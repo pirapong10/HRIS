@@ -187,6 +187,7 @@ model Department {
   // International fields
   countryCode String? // ISO 3166-1 alpha-2: TH, JP, US, SG, etc.
   currency    String? // ISO 4217: THB, JPY, USD, SGD, etc.
+  exchangeRate Float? @default(1.0)
   timezone    String? // IANA timezone: Asia/Bangkok, Asia/Tokyo, etc.
 
   status    String   @default("active") // active, inactive
@@ -261,6 +262,7 @@ model Attendance {
   shift       Shift?   @relation(fields: [shiftId], references: [id])
   locationIn  String?
   locationOut String?
+  lateMinutes Int      @default(0)
 
   @@index([empId, date])
 }
@@ -349,6 +351,10 @@ model PayrollRunDetail {
   loan          Float   @default(0)
   other_deduct  Float   @default(0)
   net           Float
+  currency      String  @default("THB")
+  exchangeRate  Float   @default(1.0)
+  grossLocal    Float   @default(0)
+  netLocal      Float   @default(0)
   status        String  @default("paid")
   paidDate      String?
 
