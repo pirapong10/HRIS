@@ -166,6 +166,32 @@ model Employee {
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   EmployeeLoan EmployeeLoan[]
+  leaveBalances LeaveBalance[]
+  leaveBalanceTransactions LeaveBalanceTransaction[]
+  leaveAccounts EmployeeLeaveAccount[]
+}
+
+model LeaveBalance {
+  id          Int      @id @default(autoincrement())
+  employeeId  Int
+  year        Int
+  leaveType   String
+  entitled    Float
+  used        Float    @default(0)
+  pending     Float    @default(0)
+  remaining   Float
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([employeeId, year, leaveType])
+}
+
+model PublicHoliday {
+  id    Int      @id @default(autoincrement())
+  date  DateTime @db.Date @unique
+  name  String
+  createdAt   DateTime @default(now())
 }
 
 model Department {
@@ -235,11 +261,13 @@ model CostCenter {
 }
 
 model Shift {
-  id            Int    @id @default(autoincrement())
-  name          String
-  startTime     String
-  endTime       String
-  breakMins     Int    @default(60)
+  id                Int      @id @default(autoincrement())
+  name              String
+  startTime         String
+  endTime           String
+  isFlexible        Boolean  @default(false)
+  lateThresholdMins Int      @default(15)
+  breakMins         Int      @default(60)
   days          String // JSON string or comma separated
   otRate        Float  @default(1.5)
   otRateHoliday Float  @default(3.0)
@@ -251,18 +279,20 @@ model Shift {
 }
 
 model Attendance {
-  id          Int      @id @default(autoincrement())
-  empId       Int
-  employee    Employee @relation(fields: [empId], references: [id])
-  date        String
-  clockIn     String?
-  clockOut    String?
-  status      String   @default("present")
-  shiftId     Int?
-  shift       Shift?   @relation(fields: [shiftId], references: [id])
-  locationIn  String?
-  locationOut String?
-  lateMinutes Int      @default(0)
+  id            Int       @id @default(autoincrement())
+  empId         Int
+  employee      Employee  @relation(fields: [empId], references: [id])
+  date          DateTime  @db.Date
+  checkInTime   DateTime
+  checkOutTime  DateTime?
+  checkInLat    Float
+  checkInLng    Float
+  checkInPhoto  String
+  checkOutPhoto String?
+  status        String    @default("ON_TIME") // 'ON_TIME', 'LATE', 'OUT_OF_ZONE'
+  shiftId       Int?
+  shift         Shift?    @relation(fields: [shiftId], references: [id])
+  lateMinutes   Int       @default(0)
 
   @@index([empId, date])
 }
@@ -316,6 +346,93 @@ model ShiftSwap {
   date           String
   reason         String?
   status         String   @default("pending")
+}
+
+
+
+model LeavePolicy {
+  id             Int       @id @default(autoincrement())
+  leaveType      String    @unique
+  description    String?
+  requiresCert   Boolean   @default(false)
+  certThreshold  Int?      // e.g., 2 (if days >= 2, cert required)
+  allowNegative  Boolean   @default(false)
+  maxNegative    Float     @default(0)
+  proRata        Boolean   @default(true)
+  isCarryForward Boolean   @default(false)
+  maxCarryDays   Float     @default(0)
+
+  entitlementRules LeaveEntitlementRule[]
+  transactions     LeaveBalanceTransaction[]
+  employeeAccounts EmployeeLeaveAccount[]
+}
+
+model LeaveEntitlementRule {
+  id             Int         @id @default(autoincrement())
+  leavePolicyId  Int
+  leavePolicy    LeavePolicy @relation(fields: [leavePolicyId], references: [id], onDelete: Cascade)
+  minYearsOfService Float 
+  maxYearsOfService Float? 
+  entitledDays      Float
+
+  @@index([leavePolicyId])
+}
+
+model ProbationPolicy {
+  id                  Int     @id @default(autoincrement())
+  probationDays       Int     @default(119)
+  allowLeaveDuring    Boolean @default(false)
+  prorateAfterPassed  Boolean @default(true)
+}
+
+model LeaveBalanceTransaction {
+  id            Int       @id @default(autoincrement())
+  empId         Int
+  employee      Employee  @relation(fields: [empId], references: [id])
+  leavePolicyId Int
+  leavePolicy   LeavePolicy @relation(fields: [leavePolicyId], references: [id])
+  year          Int
+  transactionType String
+  amount        Float
+  referenceId   String?
+  remarks       String?
+  createdAt     DateTime @default(now())
+  employeeLeaveAccountId Int?
+  employeeLeaveAccount   EmployeeLeaveAccount? @relation(fields: [employeeLeaveAccountId], references: [id])
+
+  @@index([empId, year])
+  @@index([leavePolicyId])
+}
+
+model LeaveTypeDefinition {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employeeAccounts EmployeeLeaveAccount[]
+}
+
+model EmployeeLeaveAccount {
+  id             Int         @id @default(autoincrement())
+  employeeId     Int
+  employee       Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leavePolicyId  Int
+  leavePolicy    LeavePolicy @relation(fields: [leavePolicyId], references: [id])
+  leaveTypeDefId Int?
+  leaveTypeDef   LeaveTypeDefinition? @relation(fields: [leaveTypeDefId], references: [id])
+  cachedBalance  Float       @default(0)
+  isActive       Boolean     @default(true)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  transactions   LeaveBalanceTransaction[]
+
+  @@unique([employeeId, leavePolicyId])
+  @@index([employeeId])
 }
 
 model PayrollRun {
@@ -523,9 +640,9 @@ model RefreshToken {
 
 model SystemConfig {
   id                Int      @id @default(autoincrement())
-  companyLat        Float    @default(13.7563)
-  companyLng        Float    @default(100.5018)
-  allowedRadiusM    Int      @default(50)
+  companyLat        Float?   @default(13.7563)
+  companyLng        Float?   @default(100.5018)
+  allowedRadiusM    Int?     @default(50)
   lateThresholdMins Int      @default(15)
   updatedAt         DateTime @updatedAt
 }
@@ -632,7 +749,7 @@ model EmployeeType {
   // SSO Rules
   ssoEnabled      Boolean @default(true)
   ssoRate         Float   @default(0.05)
-  ssoCap          Float   @default(750)
+  ssoCap          Float   @default(875)
   ssoEmployerRate Float   @default(0.05)
 
   // Tax Rules

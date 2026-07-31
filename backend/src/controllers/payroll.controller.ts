@@ -104,8 +104,12 @@ export const runPayroll = async (req: AuthRequest, res: Response) => {
         const loanDeduct = activeLoan ? Math.min(activeLoan.monthlyDeduct, activeLoan.remainingBal) : 0;
 
         // Sum late minutes from attendance
+        const [year, month] = period.split('-').map(Number);
+        const startOfMonth = new Date(Date.UTC(year, month - 1, 1));
+        const endOfMonth = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+        
         const attendances = await tx.attendance.findMany({
-          where: { empId: emp.id, date: { startsWith: period } }
+          where: { empId: emp.id, date: { gte: startOfMonth, lte: endOfMonth } }
         });
         const totalLateMins = attendances.reduce((sum: number, a: any) => sum + (a.lateMinutes || 0), 0);
 
@@ -264,14 +268,24 @@ export const approvePayroll = async (req: AuthRequest, res: Response) => {
 
 export const exportPayroll = async (req: AuthRequest, res: Response) => {
   try {
+    if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+
+    const scope = await buildPayrollWhereClause(req.user);
+    if (scope.accessLevel === 'DENIED') {
+      return res.status(403).json({ message: 'No access' });
+    }
+
     const { id } = req.params;
     const details = await prisma.payrollRunDetail.findMany({
-      where: { payrollRunId: Number(id) },
+      where: {
+        payrollRunId: Number(id),
+        ...scope.payrollDetailWhere
+      },
       include: { employee: true }
     });
 
     if (details.length === 0) {
-      return res.status(404).json({ message: 'No payroll details found' });
+      return res.status(404).json({ message: 'No payroll details found in your scope' });
     }
 
     const payrollRun = await prisma.payrollRun.findUnique({ 
@@ -289,6 +303,15 @@ export const exportPayroll = async (req: AuthRequest, res: Response) => {
       txt += `${bankAcc} ${amount} ${empCode}\n`;
     });
 
+    await writeAudit({
+      userId: req.user.id,
+      action: 'EXPORT',
+      module: 'payroll',
+      recordId: String(id),
+      details: `Exported bank transfer file for payroll run ${id} (${details.length} records)`,
+      ipAddress: req.ip ? String(req.ip) : undefined
+    });
+
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader('Content-Disposition', 
       `attachment; filename="bank_transfer_${payrollRun?.period || id}.txt"`);
@@ -300,13 +323,29 @@ export const exportPayroll = async (req: AuthRequest, res: Response) => {
 
 export const getPayrollDetailById = async (req: AuthRequest, res: Response) => {
   try {
+    if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+
+    const scope = await buildPayrollWhereClause(req.user);
+    if (scope.accessLevel === 'DENIED') {
+      return res.status(403).json({ message: 'No access' });
+    }
+
     const { id } = req.params;
-    const detail = await prisma.payrollRunDetail.findUnique({
-      where: { id: parseInt(id as string) },
-      include: { employee: true, components: true }
+    const detail = await prisma.payrollRunDetail.findFirst({
+      where: {
+        id: parseInt(id as string),
+        ...scope.payrollDetailWhere
+      },
+      include: { employee: true, componentResults: { include: { component: true } } }
     });
-    if (!detail) return res.status(404).json({ message: 'Payroll detail not found' });
-    res.json(detail);
+    if (!detail) return res.status(404).json({ message: 'Payroll detail not found or access denied' });
+
+    const formattedDetail = {
+      ...detail,
+      components: detail.componentResults
+    };
+
+    res.json(formattedDetail);
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }
@@ -314,14 +353,24 @@ export const getPayrollDetailById = async (req: AuthRequest, res: Response) => {
 
 export const generatePayslipPdf = async (req: AuthRequest, res: Response) => {
   try {
+    if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+
+    const scope = await buildPayrollWhereClause(req.user);
+    if (scope.accessLevel === 'DENIED') {
+      return res.status(403).json({ message: 'No access' });
+    }
+
     const { id } = req.params;
-    const detail = await prisma.payrollRunDetail.findUnique({
-      where: { id: Number(id) },
+    const detail = await prisma.payrollRunDetail.findFirst({
+      where: {
+        id: Number(id),
+        ...scope.payrollDetailWhere
+      },
       include: { employee: true, payrollRun: true, componentResults: { include: { component: true } } }
     });
 
     if (!detail) {
-      return res.status(404).json({ message: 'Payroll detail not found' });
+      return res.status(404).json({ message: 'Payroll detail not found or access denied' });
     }
 
     const doc = new PDFDocument({ margin: 50 });

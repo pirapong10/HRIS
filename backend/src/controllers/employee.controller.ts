@@ -70,7 +70,7 @@ export const getEmployees = async (req: AuthRequest, res: Response) => {
     const [employees, total] = await Promise.all([
       prisma.employee.findMany({
         where: finalWhere,
-        include: { department: true, position: true, shift: true },
+        include: { department: true, position: true, shift: true, employeeType: true },
         skip,
         take: limit,
       }),
@@ -120,8 +120,12 @@ export const updateEmployee = async (req: AuthRequest, res: Response) => {
 
     const current = await prisma.employee.findUnique({
       where: { id: employeeId },
-      select: { salary: true, posId: true, deptId: true, name: true }
+      select: { salary: true, posId: true, deptId: true, name: true, email: true }
     });
+
+    if (current && current.email === 'admin@company.com') {
+      return res.status(403).json({ message: '❌ System Superadmin account is immutable and cannot be modified or deleted.' });
+    }
 
     const employee = await prisma.employee.update({
       where: { id: employeeId },
@@ -191,6 +195,12 @@ export const updateEmployee = async (req: AuthRequest, res: Response) => {
 export const deleteEmployee = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
+    
+    const target = await prisma.employee.findUnique({ where: { id: Number(id) } });
+    if (target && target.email === 'admin@company.com') {
+      return res.status(403).json({ message: '❌ System Superadmin account is immutable and cannot be modified or deleted.' });
+    }
+
     const employee = await prisma.employee.update({
       where: { id: Number(id) },
       data: { status: 'inactive' }
@@ -228,7 +238,8 @@ export const getEmployeeDetails = async (req: AuthRequest, res: Response) => {
       include: {
         docs: true,
         history: { orderBy: { date: 'desc' } },
-        onboarding: true
+        onboarding: true,
+        employeeType: true
       }
     });
     if (!employee) return res.status(404).json({ message: 'Not found' });

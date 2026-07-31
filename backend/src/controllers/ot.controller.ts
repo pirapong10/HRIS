@@ -52,10 +52,49 @@ export const createOT = async (req: AuthRequest, res: Response) => {
     if (!data.empId && req.user?.empId) {
       data.empId = req.user.empId;
     }
+    if (!data.empId) {
+      return res.status(400).json({ message: 'Employee ID is required' });
+    }
     
     // requestedHours needs to be float
     if (data.requestedHours) data.requestedHours = parseFloat(data.requestedHours);
     if (data.shiftId) data.shiftId = parseInt(data.shiftId);
+
+    if (!data.date || !data.requestedHours || data.requestedHours <= 0) {
+      return res.status(400).json({ message: 'Date and valid requestedHours are required' });
+    }
+
+    // Thai Labor Law Check: Weekly OT limit 36 hours
+    const otDate = new Date(data.date);
+    const dayOfWeek = otDate.getUTCDay(); // 0 = Sun, 1 = Mon...
+    const diffToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const startOfWeek = new Date(otDate);
+    startOfWeek.setUTCDate(otDate.getUTCDate() + diffToMon);
+    startOfWeek.setUTCHours(0, 0, 0, 0);
+
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setUTCDate(startOfWeek.getUTCDate() + 6);
+    endOfWeek.setUTCHours(23, 59, 59, 999);
+
+    const existingOTs = await prisma.oT.findMany({
+      where: {
+        empId: data.empId,
+        status: { notIn: ['rejected', 'cancelled'] },
+        date: {
+          gte: startOfWeek.toISOString().split('T')[0],
+          lte: endOfWeek.toISOString().split('T')[0]
+        }
+      }
+    });
+
+    const currentWeeklyHours = existingOTs.reduce((sum, o) => sum + o.requestedHours, 0);
+    const MAX_WEEKLY_OT = 36;
+
+    if (currentWeeklyHours + data.requestedHours > MAX_WEEKLY_OT) {
+      return res.status(400).json({
+        message: `ไม่สามารถยื่นขอ OT ได้: เกินเพดานตามกฎหมายแรงงานไทย (36 ชม./สัปดาห์). สัปดาห์นี้ขอไปแล้ว ${currentWeeklyHours} ชม.`
+      });
+    }
 
     const ot = await prisma.oT.create({ data });
     

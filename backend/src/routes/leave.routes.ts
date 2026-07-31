@@ -1,13 +1,19 @@
 import { Router } from 'express';
-import { getLeaves, getLeaveById, createLeave, approveLeave, exportLeaves } from '../controllers/leave.controller';
-import { authenticate, requirePermission, requireOwnershipOrScope } from '../middlewares/auth.middleware';
+import { getMyLeaves, createLeave, getPendingApprovals, approveLeave, getMyLeaveBalance } from '../controllers/leave.controller';
+import { authenticate, requirePermission } from '../middlewares/auth.middleware';
+import { uploadLeaveCert } from '../middlewares/upload.middleware';
 
 const router = Router();
 
-router.get('/', authenticate, requirePermission('leave:view'), getLeaves);
-router.get('/:id', authenticate, requirePermission('leave:view'), requireOwnershipOrScope('leave', 'empId'), getLeaveById);
-router.post('/', authenticate, requirePermission('leave:create'), createLeave);
-router.put('/:id/approve', authenticate, requirePermission('leave:approve'), approveLeave);
-router.get('/export/excel', authenticate, requirePermission('leave:export'), exportLeaves);
+router.use(authenticate);
+
+// ESS Routes (Employee Self-Service)
+router.get('/balance', requirePermission('leave:view'), getMyLeaveBalance);
+router.get('/my-requests', requirePermission('leave:view'), getMyLeaves);
+router.post('/', requirePermission('leave:create'), uploadLeaveCert.single('medicalCert'), createLeave);
+
+// Manager/Admin Approval Routes
+router.get('/approvals', requirePermission('leave:approve'), getPendingApprovals);
+router.put('/approvals/:id', requirePermission('leave:approve'), approveLeave);
 
 export default router;

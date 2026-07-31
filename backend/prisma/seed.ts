@@ -224,6 +224,35 @@ async function main() {
   await upsertPayrollComponents();
   console.log('✅ Default payroll components seeded.');
   await upsertEmployeeTypes();
+  await upsertLeavePolicies();
+  await upsertPublicHolidays();
+}
+
+async function upsertPublicHolidays() {
+  const holidays2026 = [
+    { date: new Date('2026-01-01T00:00:00Z'), name: 'วันขึ้นปีใหม่' },
+    { date: new Date('2026-02-12T00:00:00Z'), name: 'วันมาฆบูชา' },
+    { date: new Date('2026-04-06T00:00:00Z'), name: 'วันจักรี' },
+    { date: new Date('2026-04-13T00:00:00Z'), name: 'วันสงกรานต์' },
+    { date: new Date('2026-04-14T00:00:00Z'), name: 'วันสงกรานต์' },
+    { date: new Date('2026-04-15T00:00:00Z'), name: 'วันสงกรานต์' },
+    { date: new Date('2026-05-01T00:00:00Z'), name: 'วันแรงงานแห่งชาติ' },
+    { date: new Date('2026-05-04T00:00:00Z'), name: 'วันฉัตรมงคล' },
+    { date: new Date('2026-06-03T00:00:00Z'), name: 'วันเฉลิมพระชนมพรรษาสมเด็จพระราชินี' },
+    { date: new Date('2026-07-28T00:00:00Z'), name: 'วันเฉลิมพระชนมพรรษาพระบาทสมเด็จพระเจ้าอยู่หัว' },
+    { date: new Date('2026-08-12T00:00:00Z'), name: 'วันแม่แห่งชาติ' },
+    { date: new Date('2026-10-13T00:00:00Z'), name: 'วันคล้ายวันสวรรคต ร.9' },
+    { date: new Date('2026-10-23T00:00:00Z'), name: 'วันปิยมหาราช' },
+    { date: new Date('2026-12-05T00:00:00Z'), name: 'วันพ่อแห่งชาติ' },
+    { date: new Date('2026-12-10T00:00:00Z'), name: 'วันรัฐธรรมนูญ' },
+    { date: new Date('2026-12-31T00:00:00Z'), name: 'วันสิ้นปี' },
+  ];
+
+  await prisma.publicHoliday.createMany({
+    data: holidays2026,
+    skipDuplicates: true,
+  });
+  console.log('✅ Public holidays 2026 seeded');
 }
 
 async function upsertPayrollComponents() {
@@ -356,6 +385,58 @@ async function upsertEmployeeTypes() {
     });
   }
   console.log('✅ EmployeeType seeded');
+}
+
+
+async function upsertLeavePolicies() {
+  const policies = [
+    { leaveType: 'annual', description: 'ลาพักร้อน', requiresCert: false, allowNegative: false, proRata: true, rules: [
+      { minYearsOfService: 0, maxYearsOfService: 1, entitledDays: 6 },
+      { minYearsOfService: 1, maxYearsOfService: null, entitledDays: 6 }
+    ]},
+    { leaveType: 'sick', description: 'ลาป่วย', requiresCert: true, certThreshold: 3, allowNegative: false, proRata: false, rules: [
+      { minYearsOfService: 0, maxYearsOfService: null, entitledDays: 30 }
+    ]},
+    { leaveType: 'personal', description: 'ลากิจ', requiresCert: false, allowNegative: false, proRata: true, rules: [
+      { minYearsOfService: 0, maxYearsOfService: null, entitledDays: 3 }
+    ]},
+    { leaveType: 'maternity', description: 'ลาคลอด', requiresCert: true, certThreshold: 1, allowNegative: false, proRata: false, rules: [
+      { minYearsOfService: 0, maxYearsOfService: null, entitledDays: 98 }
+    ]}
+  ];
+
+  for (const p of policies) {
+    const { rules, ...data } = p;
+    const policy = await prisma.leavePolicy.upsert({
+      where: { leaveType: data.leaveType },
+      update: data,
+      create: data
+    });
+
+    for (const r of rules) {
+      const existing = await prisma.leaveEntitlementRule.findFirst({
+        where: { leavePolicyId: policy.id, minYearsOfService: r.minYearsOfService }
+      });
+      if (!existing) {
+        await prisma.leaveEntitlementRule.create({
+          data: { ...r, leavePolicyId: policy.id }
+        });
+      } else {
+        await prisma.leaveEntitlementRule.update({
+          where: { id: existing.id },
+          data: r
+        });
+      }
+    }
+  }
+
+  const probExists = await prisma.probationPolicy.findFirst();
+  if (!probExists) {
+    await prisma.probationPolicy.create({
+      data: { probationDays: 119, allowLeaveDuring: false, prorateAfterPassed: true }
+    });
+  }
+  console.log('✅ Leave Policies seeded');
 }
 
 main()

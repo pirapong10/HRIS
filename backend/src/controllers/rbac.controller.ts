@@ -108,6 +108,11 @@ export const assignUserRoles = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const { roles } = req.body; // [{ roleId, deptIds? }]
 
+    const targetUser = await prisma.user.findUnique({ where: { id: Number(id) } });
+    if (targetUser && targetUser.email === 'admin@company.com') {
+      return res.status(403).json({ message: '❌ System Superadmin account is immutable and cannot be modified or deleted.' });
+    }
+
     const queries: any[] = [
       prisma.userRole.deleteMany({ where: { userId: Number(id) } })
     ];
@@ -146,6 +151,11 @@ export const setDataScope = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { departmentIds, costCenterIds, employeeTypes, jobGrades } = req.body;
+
+    const targetUser = await prisma.user.findUnique({ where: { id: Number(id) } });
+    if (targetUser && targetUser.email === 'admin@company.com') {
+      return res.status(403).json({ message: '❌ System Superadmin account is immutable and cannot be modified or deleted.' });
+    }
 
     // Validate: all deptIds must exist and be active
     if (departmentIds?.length > 0) {
@@ -195,6 +205,11 @@ export const setPayrollScope = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { employeeTypes, grades, departments, costCenters } = req.body;
+
+    const targetUser = await prisma.user.findUnique({ where: { id: Number(id) } });
+    if (targetUser && targetUser.email === 'admin@company.com') {
+      return res.status(403).json({ message: '❌ System Superadmin account is immutable and cannot be modified or deleted.' });
+    }
 
     const scope = await prisma.payrollScope.upsert({
       where: { userId: Number(id) },
@@ -279,6 +294,9 @@ export const toggleUser = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const user = await prisma.user.findUnique({ where: { id: Number(id) } });
     if (!user) return res.status(404).json({ message: 'User not found' });
+    if (user.email === 'admin@company.com') {
+      return res.status(403).json({ message: '❌ System Superadmin account is immutable and cannot be modified or deleted.' });
+    }
     const updated = await prisma.user.update({ where: { id: Number(id) }, data: { isActive: !user.isActive } });
     
     // Best-effort token revocation: If deactivated, revoke all refresh tokens

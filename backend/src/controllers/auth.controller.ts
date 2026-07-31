@@ -153,9 +153,19 @@ export const logout = async (req: any, res: Response) => {
             userId: decoded.id,
             expiresAt: new Date(decoded.exp * 1000)
           }
-        });
+        }).catch(() => {});
       }
     }
+
+    const { refreshToken } = req.cookies || {};
+    if (refreshToken) {
+      await prisma.refreshToken.updateMany({
+        where: { token: refreshToken },
+        data: { isRevoked: true }
+      }).catch(() => {});
+    }
+
+    res.clearCookie('refreshToken');
 
     await prisma.auditLog.create({
       data: { userId: req.user?.id, action: 'LOGOUT', module: 'auth', ipAddress: req.ip ? String(req.ip) : null }

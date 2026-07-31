@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { prisma } from '../prisma';
 import { buildEmployeeWhereClause } from '../utils/scopeFilter';
 import { AuthRequest } from '../middlewares/auth.middleware';
+import { AttendanceService } from '../services/attendance.service';
 import { GeoService } from '../utils/GeoService';
 import ExcelJS from 'exceljs';
 import { dispatchNotification } from '../utils/notification.service';
@@ -92,7 +93,7 @@ export const clockIn = async (req: any, res: Response) => {
 
     // Check if already clocked in today
     const existing = await prisma.attendance.findFirst({
-      where: { empId, date: today }
+      where: { empId, date: new Date(today) }
     });
 
     if (existing) {
@@ -102,10 +103,12 @@ export const clockIn = async (req: any, res: Response) => {
     const record = await prisma.attendance.create({
       data: {
         empId,
-        date: today,
-        clockIn: time,
-        status: "present",
-        locationIn: `${lat},${lng}`,
+        date: new Date(today),
+        checkInTime: new Date(),
+        status: "ON_TIME",
+        checkInLat: parseFloat(lat),
+        checkInLng: parseFloat(lng),
+        checkInPhoto: "",
         lateMinutes
       }
     });
@@ -139,7 +142,7 @@ export const clockOut = async (req: any, res: Response) => {
     const time = new Date().toLocaleTimeString("th-TH");
 
     const existing = await prisma.attendance.findFirst({
-      where: { empId, date: today }
+      where: { empId, date: new Date(today) }
     });
 
     if (!existing) {
@@ -149,8 +152,7 @@ export const clockOut = async (req: any, res: Response) => {
     const updated = await prisma.attendance.update({
       where: { id: existing.id },
       data: {
-        clockOut: time,
-        locationOut: `${lat},${lng}`
+        checkOutTime: new Date()
       }
     });
 
@@ -167,20 +169,22 @@ export const getTodayStatus = async (req: AuthRequest, res: Response) => {
     
     const today = new Date().toISOString().split('T')[0];
     const record = await prisma.attendance.findFirst({
-      where: { empId, date: today }
+      where: { empId, date: new Date(today) }
     });
     
     if (record) {
-      const createTime = (timeStr: string) => {
+      const createTime = (timeVal: any) => {
+        if (timeVal instanceof Date) return timeVal.toISOString();
+        if (typeof timeVal === 'string' && timeVal.includes('T')) return timeVal;
         const d = new Date();
         const dateStr = d.toISOString().split('T')[0];
-        return `${dateStr}T${timeStr.padStart(8, '0')}Z`;
+        return `${dateStr}T${(timeVal||'').padStart(8, '0')}Z`;
       };
       
       res.json({ 
-        clockedIn: !record.clockOut, 
-        clockIn: record.clockIn ? createTime(record.clockIn) : null,
-        clockOut: record.clockOut ? createTime(record.clockOut) : null
+        clockedIn: !record.checkOutTime, 
+        checkInTime: record.checkInTime ? createTime(record.checkInTime) : null,
+        checkOutTime: record.checkOutTime ? createTime(record.checkOutTime) : null
       });
     } else {
       res.json({ clockedIn: false, clockIn: null, clockOut: null });
@@ -316,8 +320,8 @@ export const exportAttendance = async (req: AuthRequest, res: Response) => {
         empCode: r.employee.empCode,
         name: r.employee.name,
         date: r.date,
-        clockIn: r.clockIn || '-',
-        clockOut: r.clockOut || '-',
+        clockIn: r.checkInTime || '-',
+        clockOut: r.checkOutTime || '-',
         status: r.status,
         shift: r.shift?.name || '-'
       });
@@ -330,5 +334,40 @@ export const exportAttendance = async (req: AuthRequest, res: Response) => {
     res.end();
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+export const checkIn = async (req: AuthRequest, res: Response) => {
+  try {
+    const empId = req.user?.empId;
+    if (!empId) return res.status(400).json({ message: 'User is not linked to an employee' });
+
+    if (!req.file) {
+      return res.status(400).json({ message: 'Live photo is MANDATORY' });
+    }
+
+    const { lat, lng } = req.body;
+    if (!lat || !lng) {
+      return res.status(400).json({ message: 'Coordinates are required' });
+    }
+
+    const photoPath = `/uploads/attendance/${req.file.filename}`;
+
+    const attendance = await AttendanceService.recordCheckIn(
+      empId,
+      parseFloat(lat),
+      parseFloat(lng),
+      photoPath,
+      req.user!.id,
+      req.user!.roles,
+      req.ip || 'unknown'
+    );
+
+    res.status(201).json(attendance);
+  } catch (error: any) {
+    if (error.message === 'OUT_OF_ZONE') {
+      return res.status(403).json({ message: 'Check-in failed: Out of allowed zone' });
+    }
+    res.status(400).json({ message: error.message });
   }
 };

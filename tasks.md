@@ -1,518 +1,84 @@
-# TASK.md - Update Blueprint.md From Current HRIS System
+# 🚀 Task: Sprint 6 - Time & Attendance System (Phase 1)
 
-## Objective
+## 📌 1. Project Context & Objectives
+**System:** PS Trading Enterprise HRIS
+**Module:** Time & Attendance (T&A)
+**Objective:** Implement a robust, scalable, and location-aware Time & Attendance module that mandates real-time photo capture (Live Photo) and geofencing validation to prevent buddy punching and time fraud.
+**Architecture:** Node.js/Express (Backend), React/Vite (Frontend), Prisma/PostgreSQL (Database). Adheres to Controller-Service-Repository pattern.
 
-Update `Blueprint.md` so it accurately reflects the **current implementation** of the HRIS system.
-
-Do NOT use previous Blueprint content as the source of truth.
-
-The current source code is the ONLY source of truth.
-
----
-
-## Instructions
-
-Perform a complete architecture scan of the entire project.
-
-Inspect:
-
-* Frontend
-* Backend
-* Database
-* API
-* Authentication
-* Authorization
-* Organization Structure
-* Employee Management
-* Attendance
-* Leave
-* Shift Management
-* Payroll
-* Reports
-* Settings
-* Access Control
-* Audit Logs
-
-Do NOT modify any source code.
-
-Only inspect and update documentation.
+## ⚠️ 2. Strict Business Rules & Constraints
+The AI Agent MUST strictly adhere to the following rules:
+1. **Live Photo is MANDATORY:** `checkInPhoto` is required at the database level. API must reject requests lacking a `req.file`.
+2. **Geofencing:** Check-in coordinates must be calculated against `SystemConfig` (`companyLat`, `companyLng`) using the Haversine formula.
+3. **No Isolated Systems:** All actions must log to the existing `EnterpriseAuditLog`.
+4. **Clean Architecture:** Do not mix business logic inside controllers. Keep routes clean. Use custom error handlers.
 
 ---
 
-## Required Verification
+## 🛠️ 3. Execution Plan
 
-Verify every module from the actual implementation.
+### Step 1: Database Schema Modifications (`backend/prisma/schema.prisma`)
+Define the foundational tables for T&A. Run `npx prisma format` and `npx prisma generate` after modification.
 
-Do not assume features exist.
+*   **Update `SystemConfig` Model:**
+    *   `companyLat` (Float?): Central latitude of the office.
+    *   `companyLng` (Float?): Central longitude of the office.
+    *   `allowedRadiusM` (Int?): Allowed check-in radius in meters (e.g., 100).
+*   **Create `Shift` Model:**
+    *   `id` (Int @id @default(autoincrement()))
+    *   `name` (String): e.g., "Standard Office Hours"
+    *   `startTime` (String): e.g., "09:00"
+    *   `endTime` (String): e.g., "18:00"
+    *   `isFlexible` (Boolean @default(false))
+    *   `lateThresholdMins` (Int @default(15))
+*   **Create `Attendance` Model:**
+    *   `id` (Int @id @default(autoincrement()))
+    *   `employeeId` (Int): Relation to `Employee`
+    *   `date` (DateTime @db.Date): For easy querying per day
+    *   `checkInTime` (DateTime)
+    *   `checkOutTime` (DateTime?)
+    *   `checkInLat` (Float)
+    *   `checkInLng` (Float)
+    *   `checkInPhoto` (String): **Required field.** Stores the file path.
+    *   `checkOutPhoto` (String?): Optional for check-out.
+    *   `status` (String): Enum string -> 'ON_TIME', 'LATE', 'OUT_OF_ZONE'
+    *   `createdAt` & `updatedAt`
 
-If a feature cannot be verified from source code, mark it as:
+### Step 2: Backend Upload Middleware (`backend/src/middlewares/upload.middleware.ts`)
+*   Implement a new `multer` instance export named `uploadAttendancePhoto`.
+*   **Storage:** `backend/uploads/attendance/` (Create dir automatically if it doesn't exist).
+*   **Security:** Restrict to `image/jpeg` and `image/png`. Max size: 5MB.
 
-NOT IMPLEMENTED
+### Step 3: Backend Business Logic (`backend/src/services/attendance.service.ts`)
+*   **Function `calculateDistance(lat1, lon1, lat2, lon2)`:** Implement the Haversine formula to return distance in meters.
+*   **Function `recordCheckIn(employeeId, lat, lng, photoPath)`:**
+    *   Fetch `SystemConfig`. Calculate distance. If distance > `allowedRadiusM`, set status to `OUT_OF_ZONE`.
+    *   Fetch Employee's assigned `Shift` (or default shift). Compare current time with `startTime` + `lateThresholdMins`. If late, set status to `LATE`, else `ON_TIME`.
+    *   Use Prisma `$transaction` to insert the `Attendance` record AND write an entry to `EnterpriseAuditLog`.
 
----
+### Step 4: Backend API Controllers & Routes (`backend/src/controllers/`, `backend/src/routes/`)
+*   **Controller (`attendance.controller.ts`):**
+    *   Extract `lat`, `lng` from `req.body`.
+    *   Extract `req.file?.filename`. 
+    *   **Validation:** If `!req.file` or `!lat` or `!lng`, throw `400 Bad Request`.
+    *   Call `AttendanceService.recordCheckIn`.
+*   **Route (`attendance.routes.ts`):**
+    *   `POST /api/attendance/check-in` 
+    *   Attach auth middleware, then `uploadAttendancePhoto.single('photo')`, then controller.
+*   **Static Expose (`backend/src/index.ts`):**
+    *   Ensure `/uploads` is exposed via `express.static` so frontend can render the images.
 
-## Update Blueprint.md
-
-Rewrite Blueprint.md to match the current implementation.
-
-Include the following sections.
-
-# 1. System Overview
-
-Current Version
-
-Architecture
-
-Technology Stack
-
-Frontend
-
-Backend
-
-Database
-
-Authentication
-
-Authorization
-
-Infrastructure
-
-Directory Structure
-
----
-
-# 2. Module Inventory
-
-List every module.
-
-For each module include:
-
-Purpose
-
-Pages
-
-Components
-
-API
-
-Controllers
-
-Services
-
-Database Models
-
-Relationships
-
-Current Status
-
-Implemented
-
-Partial
-
-Missing
+### Step 5: Frontend UI Preparation (Next Phase - Do Not Implement Yet)
+*   *Note for AI: Acknowledge these requirements but do not generate frontend code in this run.*
+*   Requires `react-webcam` for live capture.
+*   Requires `navigator.geolocation` for GPS.
+*   Submit via `FormData`.
 
 ---
 
-# 3. Frontend Architecture
-
-Document:
-
-Pages
-
-Layouts
-
-Contexts
-
-Hooks
-
-Reusable Components
-
-Routing
-
-State Management
-
-API Layer
-
----
-
-# 4. Backend Architecture
-
-Document:
-
-Routes
-
-Controllers
-
-Services
-
-Middleware
-
-Authentication
-
-RBAC
-
-Validation
-
-Error Handling
-
-Redis Integration
-
-Audit Logging
-
----
-
-# 5. Database Architecture
-
-Generate the current ERD summary.
-
-List:
-
-Models
-
-Primary Keys
-
-Foreign Keys
-
-Relationships
-
-Indexes
-
-Soft Delete
-
-Historical Tables
-
----
-
-# 6. Organization Architecture
-
-Document:
-
-Company
-
-Division
-
-Department
-
-Section
-
-Team
-
-Position
-
-Job Grade
-
-Cost Center
-
-Department Head
-
-Reporting Hierarchy
-
-Explain current relationships.
-
----
-
-# 7. Employee Architecture
-
-Document:
-
-Employee Master
-
-Employment Status
-
-Department Link
-
-Position Link
-
-Document Storage
-
-Emergency Contact
-
-Employment History
-
-Current implementation status.
-
----
-
-# 8. Attendance Architecture
-
-Document:
-
-Clock In
-
-Clock Out
-
-GPS
-
-Geofencing
-
-Attendance Correction
-
-Approval
-
-Late Rules
-
-Shift Integration
-
----
-
-# 9. Payroll Architecture
-
-Document:
-
-Payroll Engine
-
-Salary Structure
-
-Allowance
-
-Deduction
-
-Tax
-
-Social Security
-
-Provident Fund
-
-Loan
-
-Payroll History
-
-Payslip
-
-Bank Export
-
-Approval
-
-Current implementation status.
-
----
-
-# 10. Access Control Architecture
-
-Document:
-
-Authentication
-
-JWT
-
-Refresh Token
-
-MFA
-
-RBAC
-
-Permissions
-
-Role Hierarchy
-
-Data Scope
-
-Field-Level Security
-
-Approval Matrix
-
-Delegation
-
-Audit Logs
-
-Redis Usage
-
-Current implementation status.
-
----
-
-# 11. API Inventory
-
-Generate all API groups.
-
-For every endpoint include:
-
-Method
-
-Route
-
-Authentication Required
-
-Role Required
-
-Purpose
-
----
-
-# 12. Security Architecture
-
-Document:
-
-Authentication Flow
-
-Authorization Flow
-
-Refresh Token Flow
-
-Password Reset
-
-MFA
-
-Rate Limiting
-
-Redis Usage
-
-Audit Logging
-
-Security Risks
-
----
-
-# 13. Data Flow
-
-Generate data flow diagrams for:
-
-Organization
-
-↓
-
-Employee
-
-↓
-
-Attendance
-
-↓
-
-Payroll
-
-↓
-
-Reports
-
-Describe current implementation.
-
----
-
-# 14. Integration Matrix
-
-Verify integration between modules.
-
-Mark:
-
-CONNECTED
-
-PARTIAL
-
-NOT CONNECTED
-
-For:
-
-Organization ↔ Employee
-
-Employee ↔ Attendance
-
-Attendance ↔ Payroll
-
-Shift ↔ Attendance
-
-Payroll ↔ Reports
-
-Access Control ↔ All Modules
-
----
-
-# 15. Current Technical Debt
-
-Identify:
-
-Hardcoded Data
-
-Mock Data
-
-Large Components
-
-Duplicate Logic
-
-Unused Files
-
-Dead Code
-
-Missing Validation
-
-Missing Foreign Keys
-
-Performance Issues
-
-Redis Dependency Issues
-
-Provide evidence.
-
----
-
-# 16. Enterprise Gap Analysis
-
-Compare the current implementation with an Enterprise HRIS.
-
-Evaluate:
-
-Organization
-
-Employee
-
-Attendance
-
-Shift
-
-Payroll
-
-Access Control
-
-Security
-
-Auditability
-
-Scalability
-
-Mark:
-
-PASS
-
-PARTIAL
-
-FAIL
-
----
-
-# 17. Blueprint Summary
-
-Generate:
-
-Current Architecture Summary
-
-Implemented Features
-
-Partially Implemented Features
-
-Missing Features
-
-Known Limitations
-
-Recommended Next Priorities
-
-Overall Enterprise Readiness
-
----
-
-## Validation Rules
-
-Every statement must be verified from source code.
-
-Never assume.
-
-Never estimate.
-
-Never copy previous Blueprint content.
-
-If implementation differs from previous Blueprint:
-
-Update Blueprint to match the source code.
-
-Blueprint.md must always represent the CURRENT state of the HRIS system.
-
-Source code is the single source of truth.
+## ✅ 4. Definition of Done (DoD)
+- [ ] `schema.prisma` is updated and migrated without errors.
+- [ ] Multer middleware handles attendance photos securely.
+- [ ] Service layer accurately calculates Geofence (Haversine) and Late thresholds.
+- [ ] API rejects check-ins without photos.
+- [ ] Audit Log is recorded upon successful check-in.

@@ -1,179 +1,140 @@
 import { Request, Response } from 'express';
-import { prisma } from '../prisma';
-import { buildEmployeeWhereClause } from '../utils/scopeFilter';
+import { LeaveService } from '../services/leave.service';
 import { AuthRequest } from '../middlewares/auth.middleware';
-import ExcelJS from 'exceljs';
-import { dispatchNotification } from '../utils/notification.service';
+import { prisma } from '../prisma';
 
-export const getLeaves = async (req: AuthRequest, res: Response) => {
+export const getMyLeaves = async (req: AuthRequest, res: Response) => {
   try {
-    const scopeWhere = req.user ? await buildEmployeeWhereClause(req.user) : {};
-    if (scopeWhere.id === -1) return res.json({ data: [], total: 0, page: 1, limit: 50 });
-    
-    // Extract pagination from query
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 50;
-    const skip = (page - 1) * limit;
+    const empId = req.user?.empId;
+    if (!empId) return res.status(400).json({ message: 'User is not linked to an employee profile' });
 
-    const finalWhere = Object.keys(scopeWhere).length > 0 ? { employee: scopeWhere } : {};
-
-    const [leaves, total] = await Promise.all([
-      prisma.leave.findMany({
-        where: finalWhere,
-        include: { employee: true },
-        skip,
-        take: limit,
-        orderBy: { startDate: 'desc' }
-      }),
-      prisma.leave.count({ where: finalWhere })
-    ]);
-
-    res.json({ data: leaves, total, page, limit });
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-export const getLeaveById = async (req: AuthRequest, res: Response) => {
-  try {
-    const { id } = req.params;
-    const leave = await prisma.leave.findUnique({
-      where: { id: parseInt(id as string) },
-      include: { employee: true }
+    const leaves = await prisma.leave.findMany({
+      where: { empId },
+      orderBy: { startDate: 'desc' }
     });
-    if (!leave) return res.status(404).json({ message: 'Leave not found' });
-    res.json(leave);
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+    res.json(leaves);
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error fetching leaves', details: error.message });
   }
 };
 
 export const createLeave = async (req: AuthRequest, res: Response) => {
   try {
-    const data = { ...req.body };
-    if (!data.empId && req.user?.empId) {
-      data.empId = req.user.empId;
-    }
-    
-    const leave = await prisma.leave.create({ 
-      data,
-      include: { employee: true }
-    });
-    
-    // Also create approval request
-    await prisma.approvalRequest.create({
-      data: {
-        type: 'LEAVE',
-        referenceId: leave.id,
-        requesterId: leave.empId,
-        status: 'pending_manager'
-      }
-    });
+    const empId = req.user?.empId;
+    if (!empId) return res.status(400).json({ message: 'User is not linked to an employee profile' });
 
-    const hrAdmins = await prisma.user.findMany({ where: { roles: { hasSome: ['HR_ADMIN', 'SUPER_ADMIN'] } } });
-    for (const hr of hrAdmins) {
-      await dispatchNotification(hr.id, 'คำขอลาหยุดใหม่', `พนักงาน ${leave.employee?.name || 'พนักงาน'} ได้ยื่นคำขอลาหยุด`, 'in_app');
+    const { type, startDate, endDate, days, reason } = req.body;
+    const medicalCertPath = (req as any).file ? `/uploads/leaves/${(req as any).file.filename}` : undefined;
+
+    if (!type || !startDate || !endDate || !days) {
+      return res.status(400).json({ message: 'Missing required leave fields' });
     }
+
+    const leave = await LeaveService.createLeaveRequest(
+      empId,
+      { type, startDate, endDate, days: parseFloat(days), reason, medicalCertPath },
+      req.user!.id,
+      req.user!.roles, // Assuming roles are on req.user or parse appropriately
+      req.ip || 'unknown'
+    );
 
     res.status(201).json(leave);
   } catch (error: any) {
-    console.error("Create Leave Error:", error);
-    res.status(500).json({ message: 'Server error', details: error.message });
+    console.error('Create Leave Error:', error);
+    res.status(400).json({ message: error.message });
+  }
+};
+
+export const getPendingApprovals = async (req: AuthRequest, res: Response) => {
+  try {
+    // In a real system, you might filter by department head, but here we return all pending for authorized users
+    const pendingReqs = await prisma.approvalRequest.findMany({
+      where: { type: 'LEAVE', status: 'pending_manager' },
+      include: {
+        requester: true,
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    // Also fetch the leave details for each request
+    const leaveIds = pendingReqs.map(r => r.referenceId);
+    const leaves = await prisma.leave.findMany({
+      where: { id: { in: leaveIds } }
+    });
+
+    const results = pendingReqs.map(req => ({
+      ...req,
+      leaveDetails: leaves.find(l => l.id === req.referenceId)
+    }));
+
+    res.json(results);
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error fetching approvals', details: error.message });
   }
 };
 
 export const approveLeave = async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
-    const { status, comment } = req.body; // status: 'approved' | 'rejected'
+    const approvalRequestId = parseInt(String(req.params.id), 10);
+    if (isNaN(approvalRequestId)) return res.status(400).json({ message: 'Invalid ID' });
 
-    const leave = await prisma.leave.findUnique({ where: { id: parseInt(id as string) } });
-    if (!leave) return res.status(404).json({ message: 'Leave not found' });
-
-    const updated = await prisma.leave.update({
-      where: { id: leave.id },
-      data: {
-        status,
-        approver: req.user?.email || 'System'
-      },
-      include: { employee: true }
-    });
-
-    await prisma.auditLog.create({
-      data: {
-        userId: req.user?.id,
-        action: 'UPDATE',
-        module: 'attendance',
-        details: `Leave ${id} status updated to ${status}`,
-        recordId: id,
-        ipAddress: req.ip || ''
-      }
-    });
-
-    const empUser = await prisma.user.findUnique({ where: { empId: updated.empId } });
-    if (empUser) {
-      await dispatchNotification(empUser.id, 'อัปเดตสถานะการลา', `คำขอลาหยุดของคุณได้รับการ ${status === 'approved' ? 'อนุมัติ' : 'ปฏิเสธ'} แล้ว`, 'email', { email: true, emailTo: empUser.email || undefined });
+    const { action, comment } = req.body;
+    if (!['APPROVED', 'REJECTED'].includes(action)) {
+      return res.status(400).json({ message: 'Action must be APPROVED or REJECTED' });
     }
 
-    res.json(updated);
+    const updatedLeave = await LeaveService.processLeaveApproval(
+      approvalRequestId,
+      req.user!.id,
+      action as 'APPROVED' | 'REJECTED',
+      comment,
+      req.user!.roles,
+      req.ip || 'unknown'
+    );
+
+    res.json({ message: `Leave ${action.toLowerCase()} successfully`, data: updatedLeave });
   } catch (error: any) {
-    res.status(500).json({ message: 'Server error', details: error.message });
+    console.error('Approve Leave Error:', error);
+    res.status(400).json({ message: error.message });
   }
 };
 
-export const exportLeaves = async (req: AuthRequest, res: Response) => {
+export const getMyLeaveBalance = async (req: AuthRequest, res: Response) => {
   try {
-    const scopeWhere = req.user ? await buildEmployeeWhereClause(req.user) : {};
-    if (scopeWhere.id === -1) return res.status(403).json({ message: 'No access' });
+    const empId = req.user?.empId;
+    if (!empId) return res.status(400).json({ message: 'User is not linked to an employee profile' });
 
-    const { startDate, endDate } = req.query;
-    const finalWhere: any = Object.keys(scopeWhere).length > 0 ? { employee: scopeWhere } : {};
-    
-    if (startDate && endDate) {
-      finalWhere.startDate = { gte: startDate as string };
-      finalWhere.endDate = { lte: endDate as string };
+    const year = new Date().getFullYear();
+
+    const balances = await prisma.leaveBalance.findMany({
+      where: { employeeId: empId, year },
+    });
+
+    if (balances.length === 0) {
+      const employee = await prisma.employee.findUnique({
+        where: { id: empId },
+        include: { employeeType: true },
+      });
+
+      if (employee && employee.employeeType && employee.employeeType.leaveEligible) {
+        const entitled = employee.employeeType.annualLeave || 6;
+        const newBalance = await prisma.leaveBalance.create({
+          data: {
+            employeeId: empId,
+            year,
+            leaveType: 'annual',
+            entitled,
+            used: 0,
+            pending: 0,
+            remaining: entitled
+          }
+        });
+        return res.json([newBalance]);
+      }
     }
 
-    const leaves = await prisma.leave.findMany({
-      where: finalWhere,
-      include: { employee: true },
-      orderBy: { startDate: 'desc' }
-    });
-
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Leaves');
-
-    worksheet.columns = [
-      { header: 'Employee Code', key: 'empCode', width: 15 },
-      { header: 'Name', key: 'name', width: 30 },
-      { header: 'Type', key: 'type', width: 15 },
-      { header: 'Start Date', key: 'startDate', width: 15 },
-      { header: 'End Date', key: 'endDate', width: 15 },
-      { header: 'Days', key: 'days', width: 10 },
-      { header: 'Status', key: 'status', width: 15 },
-      { header: 'Approver', key: 'approver', width: 25 },
-    ];
-
-    leaves.forEach((l: any) => {
-      worksheet.addRow({
-        empCode: l.employee.empCode,
-        name: l.employee.name,
-        type: l.type,
-        startDate: l.startDate,
-        endDate: l.endDate,
-        days: l.days,
-        status: l.status,
-        approver: l.approver || '-'
-      });
-    });
-
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename="leaves_report.xlsx"');
-    
-    await workbook.xlsx.write(res);
-    res.end();
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+    res.json(balances);
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error fetching leave balance', details: error.message });
   }
 };
-
