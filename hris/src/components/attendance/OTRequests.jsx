@@ -5,7 +5,9 @@ import { usePermission } from '../../hooks/usePermission';
 import { Card, Tbl, Avatar, Badge, statusBadge, Btn, Inp, Sel, Modal, StatCard } from '../common/UI';
 import { C } from '../../utils/theme';
 import { fmtB, getEmp, getEmpName, getShift, isHolidayOrWeekend, calcOTPay, getWeeklyOTHours, OT_WEEKLY_CAP } from '../../utils/helpers';
-import { INIT_SHIFTS, INIT_OT, EMPLOYEES } from '../../utils/mockData';
+const INIT_SHIFTS = [];
+const INIT_OT = [];
+const EMPLOYEES = [];
 
 export const OTRequests = () => {
   const { user } = useAuth();

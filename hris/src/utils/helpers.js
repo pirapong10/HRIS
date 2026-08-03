@@ -1,4 +1,7 @@
-import { DEPTS, POSITIONS, EMPLOYEES, INIT_SHIFTS, TAX_BRACKETS } from './mockData';
+const DEPTS = [];
+const POSITIONS = [];
+const EMPLOYEES = [];
+const INIT_SHIFTS = [];
 
 export async function hashPassword(password) {
   const encoder = new TextEncoder();

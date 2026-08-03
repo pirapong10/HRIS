@@ -38,12 +38,22 @@ async function getEmployeeCurrency(empId: number, tx: any) {
   return { currency: 'THB', exchangeRate: 1.0 };
 }
 
-export const runPayroll = async (req: AuthRequest, res: Response) => {
-  try {
-    const { period } = req.body;
-    if (!period) return res.status(400).json({ message: 'Period is required (YYYY-MM)' });
+// Distributed Execution Lock Guard to prevent race conditions on concurrent payroll runs
+const activePayrollLocks = new Set<string>();
 
-    if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+export const runPayroll = async (req: AuthRequest, res: Response) => {
+  const { period } = req.body;
+  if (!period) return res.status(400).json({ message: 'Period is required (YYYY-MM)' });
+  if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+
+  // Race Condition Protection: Lock execution for this period
+  const lockKey = `payroll_lock_${period}_${req.user.id}`;
+  if (activePayrollLocks.has(lockKey)) {
+    return res.status(429).json({ message: 'การคำนวณเงินเดือนสำหรับงวดนี้กำลังดำเนินการอยู่ กรุณารอสักครู่' });
+  }
+
+  try {
+    activePayrollLocks.add(lockKey);
 
     // 1. Enforce PayrollScope
     const scope = await buildPayrollWhereClause(req.user);
@@ -208,6 +218,9 @@ export const runPayroll = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error("Run Payroll Error:", error);
     res.status(500).json({ message: 'Server error', details: error.message });
+  } finally {
+    const lockKey = `payroll_lock_${period}_${req.user.id}`;
+    activePayrollLocks.delete(lockKey);
   }
 };
 
@@ -416,5 +429,47 @@ export const generatePayslipPdf = async (req: AuthRequest, res: Response) => {
 
   } catch (error) {
     res.status(500).json({ message: 'Error generating PDF' });
+  }
+};
+
+export const exportSSOReport = async (req: AuthRequest, res: Response) => {
+  try {
+    const { period } = req.query;
+    if (!period) return res.status(400).json({ message: 'Period query parameter is required (YYYY-MM)' });
+    if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+
+    const scope = await buildPayrollWhereClause(req.user);
+    if (scope.accessLevel === 'DENIED') {
+      return res.status(403).json({ message: 'No access' });
+    }
+
+    const details = await prisma.payrollRunDetail.findMany({
+      where: {
+        payrollRun: { period: String(period) },
+        ...scope.payrollDetailWhere
+      },
+      include: {
+        employee: true,
+        payrollRun: true
+      }
+    });
+
+    // Generate Standard Social Security (สปส. 1-10) Export Data
+    let ssoLines = [`เลขประจำตัวผู้เสียภาษี/เลขที่บัญชีนายจ้าง,เลขประจำตัวประชาชน,ชื่อ-นามสกุล,ค่าจ้างสุทธิ,เงินสมทบผู้ประกันตน`];
+
+    details.forEach(d => {
+      const ssoNo = d.employee.taxId || d.employee.empCode || 'N/A';
+      const name = d.employee.name || '';
+      const gross = d.gross.toFixed(2);
+      const sso = d.sso.toFixed(2);
+      ssoLines.push(`0105550000000,${ssoNo},"${name}",${gross},${sso}`);
+    });
+
+    const csvContent = ssoLines.join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="sso_report_${period}.csv"`);
+    res.send('\uFEFF' + csvContent); // Include UTF-8 BOM for Excel compatibility
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error exporting SSO report', details: error.message });
   }
 };
