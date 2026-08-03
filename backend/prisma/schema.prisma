@@ -607,6 +607,7 @@ model ApprovalRequest {
   updatedAt DateTime @updatedAt
 
   logs ApprovalLog[]
+  stepLogs ApprovalStepLog[]
 }
 
 model ApprovalLog {
@@ -770,4 +771,62 @@ model EmployeeType {
   updatedAt DateTime @updatedAt
 
   employees Employee[]
+}
+
+// ─── Dynamic Approval Engine Models ───────────────────────────────────
+
+model ApprovalRule {
+  id           Int                @id @default(autoincrement())
+  module       String             // LEAVE, OT, CORRECTION, HEADCOUNT, EXPENSE
+  name         String
+  deptId       Int?
+  employeeType String?
+  minThreshold Float?             // e.g. min 0 days/hours
+  maxThreshold Float?             // e.g. max 3 days/hours
+  isActive     Boolean            @default(true)
+  priority     Int                @default(1)
+  steps        ApprovalRuleStep[]
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([module, deptId, isActive])
+}
+
+model ApprovalRuleStep {
+  id             Int          @id @default(autoincrement())
+  approvalRuleId Int
+  approvalRule   ApprovalRule @relation(fields: [approvalRuleId], references: [id], onDelete: Cascade)
+  stepNumber     Int
+  approverType   String       // DIRECT_MANAGER, DEPT_HEAD, ROLE, SPECIFIC_USER
+  targetRoleId   Int?
+  specificEmpId  Int?
+  autoApproveMins Int?
+  requireReason  Boolean      @default(true)
+
+  @@unique([approvalRuleId, stepNumber])
+}
+
+model ApprovalStepLog {
+  id                Int             @id @default(autoincrement())
+  approvalRequestId Int
+  approvalRequest   ApprovalRequest @relation(fields: [approvalRequestId], references: [id], onDelete: Cascade)
+  stepNumber        Int
+  approverEmpId     Int
+  actualApprovedBy  Int?
+  status            String          // PENDING, APPROVED, REJECTED, SKIPPED
+  comment           String?
+  actionAt          DateTime?
+  createdAt         DateTime        @default(now())
+}
+
+model ApprovalDelegate {
+  id            Int      @id @default(autoincrement())
+  originalEmpId Int
+  delegateEmpId Int
+  startDate     DateTime
+  endDate       DateTime
+  reason        String?
+  isActive      Boolean  @default(true)
+
+  @@index([originalEmpId, startDate, endDate])
 }

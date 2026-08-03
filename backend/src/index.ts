@@ -33,6 +33,7 @@ import employeeTypeRoutes from './routes/employeeType.routes';
 import publicHolidayRoutes from './routes/public-holiday.routes';
 import leavePolicyRoutes from './routes/leave-policy.routes';
 import adminLeaveRoutes from './routes/admin-leave.routes';
+import approvalRuleRoutes from './routes/approvalRule.routes';
 
 dotenv.config();
 
@@ -116,6 +117,7 @@ app.use('/api/employee-types', employeeTypeRoutes);
 app.use('/api/public-holidays', publicHolidayRoutes);
 app.use('/api/leave-policies', leavePolicyRoutes);
 app.use('/api/admin/leave', adminLeaveRoutes);
+app.use('/api/approval-rules', approvalRuleRoutes);
 
 // Static files
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
