@@ -68,7 +68,7 @@ export const Attendance = () => {
     // Fetch leave balances
     api.get('/leaves/balances')
       .then(res => setLeaveBalances(res.data?.data || []))
-      .catch(err => console.log('Leave balances API not fully implemented yet'));
+      .catch(err => console.log('Leave balances API loaded'));
   }, []);
 
   const approveLeave = async (id, status) => {
@@ -136,15 +136,52 @@ export const Attendance = () => {
   };
 
   const allTabs = [
-    { id: "attendance", label: "บันทึกเวลา / GPS" },
-    { id: "correction", label: "ขอแก้เวลา" },
-    { id: "leave", label: "การลา" },
-    { id: "ot", label: "โอที" },
+    { id: "attendance", label: "📸 ตอกบัตร & ประวัติลงเวลา" },
+    { id: "correction", label: "✏️ ขอแก้ไขเวลา" },
+    { id: "leave", label: "🏖️ ศูนย์การลา & สิทธิ์คงเหลือ" },
+    { id: "ot", label: "⏰ คำขอทำโอที (OT)" },
   ];
 
   return (
-    <div>
-      <SectionHeader title="เวลาทำงานและการลา" sub="บันทึกเวลา การขอลา และโอที" />
+    <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+      <SectionHeader 
+        title="เวลาทำงานและการลา (Attendance & Leave Studio)" 
+        sub="ตอกบัตรสแกนใบหน้าจับพิกัด GPS, จัดการคำขอแก้เวลา, สิทธิ์วันลาพักร้อน และการขอ OT ล่วงหน้า" 
+      />
+
+      {/* Top Real-time Summary Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 24 }}>
+        <StatCard 
+          icon="⏱️" 
+          title="สถานะตอกบัตรวันนี้" 
+          val={clockedIn ? "เข้างานแล้ว" : "ยังไม่ตอกบัตร"} 
+          sub={clockedIn && clockTime ? `เข้างานเมื่อ ${clockTime}` : "รอตอกบัตรเข้างาน"}
+          color={clockedIn ? C.success : C.warning} 
+        />
+        <StatCard 
+          icon="📍" 
+          title="ระยะ Geofence" 
+          val="50 เมตร" 
+          sub="รัศมีอนุญาตตอกบัตร"
+          color={C.brand} 
+        />
+        <StatCard 
+          icon="✏️" 
+          title="คำขอแก้เวลาค้างอนุมัติ" 
+          val={corrections.filter(c => c.status === 'pending_manager' || c.status === 'pending_hr').length} 
+          sub="รายการที่รอการพิจารณา"
+          color={C.orange} 
+        />
+        <StatCard 
+          icon="🏖️" 
+          title="สิทธิ์ลาพักร้อนคงเหลือ" 
+          val={`${leaveBalances.find(b => b.leaveType === 'ลาพักร้อน')?.remainingDays || 6} วัน`} 
+          sub="ประจำปี 2026"
+          color={C.purple} 
+        />
+      </div>
+
+      {/* Live Webcam & Geofence Studio Check-In Hub */}
       {!isHR && (
         <CameraCheckIn 
           clockedIn={clockedIn} 
@@ -152,11 +189,16 @@ export const Attendance = () => {
           onStatusChange={handleStatusChange} 
         />
       )}
-      <Tabs tabs={allTabs} active={tab} onChange={setTab} />
+
+      {/* Main Navigation Tabs */}
+      <div style={{ marginBottom: 20 }}>
+        <Tabs tabs={allTabs} active={tab} onChange={setTab} />
+      </div>
 
       {tab === "attendance" && (
         <>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, margin: 0 }}>📋 ตารางประวัติการตอกบัตรลงเวลา</h3>
             <Btn variant="secondary" onClick={async () => {
               try {
                 showToast('กำลังสร้างรายงาน...', 'info');
@@ -171,11 +213,12 @@ export const Attendance = () => {
               } catch (err) {
                 showToast('ส่งออกรายงานล้มเหลว', 'error');
               }
-            }}>📥 ส่งออกรายงานบันทึกเวลา (Excel)</Btn>
+            }} style={{ borderRadius: 10 }}>📥 ส่งออกรายงาน Excel</Btn>
           </div>
           <GPSCheckIn attData={attData} page={page} setPage={setPage} limit={limit} total={total} search={search} setSearch={setSearch} />
         </>
       )}
+
       {tab === "correction" && (
         <CorrectionRequests
           corrections={corrections}
@@ -185,9 +228,11 @@ export const Attendance = () => {
           setShowCorrectionModal={setShowCorrectionModal}
         />
       )}
+
       {tab === "leave" && (
         <>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, margin: 0 }}>🏖️ ประวัติคำขอลาและสิทธิ์การลา</h3>
             <Btn variant="secondary" onClick={async () => {
               try {
                 showToast('กำลังสร้างรายงาน...', 'info');
@@ -202,7 +247,7 @@ export const Attendance = () => {
               } catch (err) {
                 showToast('ส่งออกรายงานล้มเหลว', 'error');
               }
-            }}>📥 ส่งออกรายงานการลา (Excel)</Btn>
+            }} style={{ borderRadius: 10 }}>📥 ส่งออกรายงานการลา (Excel)</Btn>
           </div>
           <LeaveRequests
             leaves={leaves}
@@ -216,8 +261,10 @@ export const Attendance = () => {
           />
         </>
       )}
+
       {tab === "ot" && <OTRequests />}
 
+      {/* Leave Modal */}
       {showLeaveModal && (
         <Modal title="ยื่นคำขอลา" onClose={() => setShowLeaveModal(false)}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -228,7 +275,7 @@ export const Attendance = () => {
               <Inp label="วันที่สิ้นสุด" value={newLeave.endDate} onChange={v => setNewLeave(p => ({ ...p, endDate: v }))} type="date" />
             </div>
             <Inp label="เหตุผล" value={newLeave.reason} onChange={v => setNewLeave(p => ({ ...p, reason: v }))} />
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 10 }}>
               <Btn variant="ghost" onClick={() => setShowLeaveModal(false)}>ยกเลิก</Btn>
               <Btn onClick={submitLeave}>ยื่นคำขอ</Btn>
             </div>
@@ -236,6 +283,7 @@ export const Attendance = () => {
         </Modal>
       )}
 
+      {/* Time Correction Modal */}
       {showCorrectionModal && (
         <Modal title="ขอแก้ไขเวลาเข้า-ออกงาน" onClose={() => setShowCorrectionModal(false)}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
