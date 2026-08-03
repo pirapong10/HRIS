@@ -473,3 +473,45 @@ export const exportSSOReport = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: 'Error exporting SSO report', details: error.message });
   }
 };
+
+export const exportPND1Report = async (req: AuthRequest, res: Response) => {
+  try {
+    const { period } = req.query;
+    if (!period) return res.status(400).json({ message: 'Period query parameter is required (YYYY-MM)' });
+    if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+
+    const scope = await buildPayrollWhereClause(req.user);
+    if (scope.accessLevel === 'DENIED') {
+      return res.status(403).json({ message: 'No access' });
+    }
+
+    const details = await prisma.payrollRunDetail.findMany({
+      where: {
+        payrollRun: { period: String(period) },
+        ...scope.payrollDetailWhere
+      },
+      include: {
+        employee: true,
+        payrollRun: true
+      }
+    });
+
+    // Generate Standard Revenue Department ภ.ง.ด.1 Text Export Format
+    let pndLines = [`ลำดับ,เลขผู้เสียภาษีประจำตัวประชาชน,ชื่อ-นามสกุล,เงินได้ที่จ่าย,ภาษีที่หักและนำส่ง`];
+
+    details.forEach((d, idx) => {
+      const taxId = d.employee.taxId || 'N/A';
+      const name = d.employee.name || '';
+      const gross = d.gross.toFixed(2);
+      const tax = d.tax.toFixed(2);
+      pndLines.push(`${idx + 1},${taxId},"${name}",${gross},${tax}`);
+    });
+
+    const csvContent = pndLines.join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="pnd1_tax_report_${period}.csv"`);
+    res.send('\uFEFF' + csvContent); // Include UTF-8 BOM for Excel compatibility
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error exporting PND1 tax report', details: error.message });
+  }
+};

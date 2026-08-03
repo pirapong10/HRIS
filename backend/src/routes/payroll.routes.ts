@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { runPayroll, getPayroll, approvePayroll, exportPayroll, getPayrollDetailById, generatePayslipPdf, exportSSOReport } from '../controllers/payroll.controller';
+import { runPayroll, getPayroll, approvePayroll, exportPayroll, getPayrollDetailById, generatePayslipPdf, exportSSOReport, exportPND1Report } from '../controllers/payroll.controller';
 import { authenticate, requirePermission, requireRole } from '../middlewares/auth.middleware';
 
 const router = Router();
@@ -15,6 +15,9 @@ router.get('/', requirePermission('payroll:view'), getPayroll);
 
 // Export Social Security (สปส. 1-10) report
 router.get('/sso-report', requirePermission('payroll:export'), exportSSOReport);
+
+// Export Monthly Revenue Tax Filing (ภ.ง.ด. 1) report
+router.get('/pnd1-report', requirePermission('payroll:export'), exportPND1Report);
 
 // Get payroll detail by id
 import { requireOwnershipOrScope } from '../middlewares/auth.middleware';
